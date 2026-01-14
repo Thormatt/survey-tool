@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Survey settings for response collection
+enum SurveyAccessType {
+  PUBLIC       // Listed publicly, anyone can respond
+  UNLISTED     // Only people with the direct link can respond (not discoverable)
+  INVITE_ONLY  // Only invited email addresses can respond
+}
+
+// Survey - the main survey entity
+model Survey {
+  id            String           @id @default(cuid())
+  title         String
+  description   String?
+  published     Boolean          @default(false)
+  userId        String           // Clerk user ID - survey owner
+  accessType    SurveyAccessType @default(PUBLIC)
+  isAnonymous   Boolean          @default(true) // If true, don't track respondent identity
+  closesAt      DateTime?        // Optional deadline
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  questions     Question[]
+  responses     Response[]
+  invitations   Invitation[]
+
+  @@index([published])
+  @@index([userId])
+}
+
+// Invitation - tracks who has been invited to a survey
+model Invitation {
+  id          String    @id @default(cuid())
+  surveyId    String
+  survey      Survey    @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  email       String
+  token       String    @unique @default(cuid()) // Magic link token
+  sentAt      DateTime  @default(now())
+  openedAt    DateTime? // When they clicked the link
+  completedAt DateTime? // When they submitted a response
+  responseId  String?   // Link to their response (if not anonymous)
+  createdAt   DateTime  @default(now())
+
+  @@unique([surveyId, email])
+  @@index([surveyId])
+  @@index([token])
+}
+
+// Question types enum
+enum QuestionType {
+  SHORT_TEXT
+  LONG_TEXT
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  RATING
+  SCALE
+  DATE
+  EMAIL
+  NUMBER
+}
+
+// Question - individual questions in a survey
+model Question {
+  id          String       @id @default(cuid())
+  surveyId    String
+  survey      Survey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  type        QuestionType
+  title       String
+  description String?
+  required    Boolean      @default(false)
+  order       Int
+  options     Json?        // For choice questions: ["Option 1", "Option 2", ...]
+  settings    Json?        // Type-specific settings (min/max for scale, etc.)
+  answers     Answer[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([surveyId])
+  @@index([order])
+}
+
+// Response - a single survey submission
+model Response {
+  id              String   @id @default(cuid())
+  surveyId        String
+  survey          Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  answers         Answer[]
+  respondentEmail String?  // Only stored if survey is not anonymous
+  respondentName  String?  // Only stored if survey is not anonymous
+  invitationToken String?  // If came from invitation
+  completedAt     DateTime @default(now())
+  metadata        Json?    // Optional: user agent, referrer, etc.
+
+  @@index([surveyId])
+  @@index([completedAt])
+  @@index([invitationToken])
+}
+
+// Answer - individual answer to a question
+model Answer {
+  id         String   @id @default(cuid())
+  responseId String
+  response   Response @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  value      Json     // Flexible: string, number, array of selected options, etc.
+  createdAt  DateTime @default(now())
+
+  @@index([responseId])
+  @@index([questionId])
+}
+
+// Email Group - reusable lists of email recipients
+model EmailGroup {
+  id        String             @id @default(cuid())
+  name      String             // e.g., "C-Suite", "Guild", "Contractors"
+  userId    String             // Clerk user ID - group owner
+  color     String?            // Optional color for UI display
+  members   EmailGroupMember[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+// Email Group Member - individual email in a group
+model EmailGroupMember {
+  id        String     @id @default(cuid())
+  groupId   String
+  group     EmailGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  email     String
+  name      String?    // Optional display name
+  createdAt DateTime   @default(now())
+
+  @@unique([groupId, email])
+  @@index([groupId])
+}
