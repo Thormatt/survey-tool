@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 // Admin emails that can access the dashboard
 const ADMIN_EMAILS = [
   "thormatt@gmail.com",
-  // Add more admin emails here
+  "jmctiernan@anduslabs.com",
 ];
 
 // Public routes that don't require authentication
