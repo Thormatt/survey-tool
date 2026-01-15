@@ -1,4 +1,4 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkClient, clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 // Admin emails that can access the dashboard
@@ -21,13 +21,18 @@ const isPublicRoute = createRouteMatcher([
 
 export default clerkMiddleware(async (auth, req) => {
   if (!isPublicRoute(req)) {
-    const { userId, sessionClaims } = await auth.protect();
+    const { userId } = await auth.protect();
+
+    // Fetch user from Clerk to get their email
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+    const userEmail = user.emailAddresses.find(
+      (e) => e.id === user.primaryEmailAddressId
+    )?.emailAddress;
 
     // Check if user email is in admin list
-    const userEmail = sessionClaims?.email as string | undefined;
-
-    if (userEmail && !ADMIN_EMAILS.includes(userEmail.toLowerCase())) {
-      // Not an admin - redirect to unauthorized page or sign out
+    if (!userEmail || !ADMIN_EMAILS.includes(userEmail.toLowerCase())) {
+      // Not an admin - redirect to unauthorized page
       return NextResponse.redirect(new URL("/unauthorized", req.url));
     }
   }
