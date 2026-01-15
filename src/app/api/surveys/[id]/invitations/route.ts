@@ -56,7 +56,7 @@ export async function POST(
 
     const { id } = await params;
     const body = await request.json();
-    const { emails } = body; // Array of email addresses
+    const { emails, subject, senderName, customMessage, emailTitle, ctaButtonText, timeEstimate } = body;
 
     if (!emails || !Array.isArray(emails) || emails.length === 0) {
       return NextResponse.json(
@@ -112,15 +112,21 @@ export async function POST(
         const surveyLink = `${baseUrl}/s/${id}?token=${invitation.token}`;
         await sendSurveyInvite({
           to: email,
-          surveyTitle: survey.title,
+          surveyTitle: emailTitle || survey.title,
           surveyDescription: survey.description || undefined,
           surveyLink,
+          senderName: senderName || undefined,
+          customMessage: customMessage || undefined,
+          customSubject: subject || undefined,
+          ctaButtonText: ctaButtonText || undefined,
+          timeEstimate: timeEstimate || undefined,
         });
 
         results.push({ email, success: true });
-      } catch (err) {
-        console.error(`Failed to invite ${email}:`, err);
-        results.push({ email, success: false, error: "Failed to send email" });
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        console.error(`Failed to invite ${email}:`, errorMessage, err);
+        results.push({ email, success: false, error: errorMessage });
       }
     }
 

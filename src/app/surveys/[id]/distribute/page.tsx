@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,7 +19,6 @@ import {
   Clock,
   Eye,
   Link as LinkIcon,
-  Globe,
   Lock,
   Users,
   EyeOff,
@@ -28,9 +28,49 @@ import {
   Trash2,
   Edit3,
   FolderPlus,
+  Bell,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
+
+// Animation variants
+const pageVariants = {
+  initial: { opacity: 0 },
+  animate: {
+    opacity: 1,
+    transition: { duration: 0.3, staggerChildren: 0.1 },
+  },
+};
+
+const cardVariants = {
+  initial: { opacity: 0, y: 20 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    transition: { type: "spring" as const, stiffness: 300, damping: 25 },
+  },
+};
+
+const successVariants = {
+  initial: { opacity: 0, scale: 0.8, y: 20 },
+  animate: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: { type: "spring" as const, stiffness: 400, damping: 25 },
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.8,
+    y: -20,
+    transition: { duration: 0.2 },
+  },
+};
+
+interface Question {
+  id: string;
+  type: string;
+}
 
 interface Survey {
   id: string;
@@ -38,6 +78,21 @@ interface Survey {
   published: boolean;
   accessType: string;
   isAnonymous: boolean;
+  questions?: Question[];
+  reminderEnabled?: boolean;
+  reminderIntervalDays?: number;
+  reminderMaxCount?: number;
+}
+
+// Calculate estimated time based on question count (~30 sec per question)
+function calculateTimeEstimate(questionCount: number): string {
+  if (questionCount === 0) return "1 minute";
+  if (questionCount <= 2) return "1 minute";
+  if (questionCount <= 5) return "2 minutes";
+  if (questionCount <= 8) return "3 minutes";
+  if (questionCount <= 12) return "4 minutes";
+  if (questionCount <= 16) return "5 minutes";
+  return `${Math.ceil(questionCount / 3)} minutes`;
 }
 
 interface Invitation {
@@ -89,6 +144,15 @@ export default function DistributePage() {
   const [newGroupMembers, setNewGroupMembers] = useState("");
   const [savingGroup, setSavingGroup] = useState(false);
 
+  // Email customization state
+  const [emailSubject, setEmailSubject] = useState("");
+  const [senderName, setSenderName] = useState("Survey Team");
+  const [customMessage, setCustomMessage] = useState("");
+  const [emailTitle, setEmailTitle] = useState("");
+  const [ctaButtonText, setCtaButtonText] = useState("Take Survey →");
+  const [timeEstimate, setTimeEstimate] = useState("");
+  const [showEmailPreview, setShowEmailPreview] = useState(false);
+
   const updateSurvey = async (updates: Partial<Survey>) => {
     if (!survey) return;
     setUpdating(true);
@@ -129,7 +193,13 @@ export default function DistributePage() {
 
         if (!surveyRes.ok) throw new Error("Survey not found");
 
-        setSurvey(await surveyRes.json());
+        const surveyData = await surveyRes.json();
+        setSurvey(surveyData);
+
+        // Set calculated time estimate based on question count
+        const questionCount = surveyData.questions?.length || 0;
+        setTimeEstimate(calculateTimeEstimate(questionCount));
+
         if (invitationsRes.ok) {
           setInvitations(await invitationsRes.json());
         }
@@ -197,7 +267,15 @@ export default function DistributePage() {
       const res = await fetch(`/api/surveys/${params.id}/invitations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emails: allEmails }),
+        body: JSON.stringify({
+          emails: allEmails,
+          subject: emailSubject || undefined,
+          senderName: senderName || undefined,
+          customMessage: customMessage || undefined,
+          emailTitle: emailTitle || undefined,
+          ctaButtonText: ctaButtonText !== "Take Survey →" ? ctaButtonText : undefined,
+          timeEstimate: timeEstimate !== "2-3 minutes" ? timeEstimate : undefined,
+        }),
       });
 
       if (!res.ok) {
@@ -207,12 +285,12 @@ export default function DistributePage() {
 
       const data = await res.json();
       const successful = data.results.filter((r: { success: boolean }) => r.success).length;
-      const failed = data.results.filter((r: { success: boolean }) => !r.success).length;
+      const failedResults = data.results.filter((r: { success: boolean }) => !r.success);
 
       if (successful > 0) {
         setSuccessMessage(
           `Successfully sent ${successful} invitation${successful > 1 ? "s" : ""}${
-            failed > 0 ? `. ${failed} failed (may need domain verification).` : ""
+            failedResults.length > 0 ? `. ${failedResults.length} failed.` : ""
           }`
         );
         setEmails("");
@@ -223,7 +301,9 @@ export default function DistributePage() {
           setInvitations(await invitationsRes.json());
         }
       } else {
-        setError("Failed to send invitations. You may need to verify your domain at resend.com/domains to send to other email addresses.");
+        // Show the actual error from Resend
+        const firstError = failedResults[0]?.error || "Unknown error";
+        setError(`Failed to send invitations: ${firstError}`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send invitations");
@@ -322,7 +402,27 @@ export default function DistributePage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#fbf5ea] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-[#6b6b7b]" />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: "spring", stiffness: 300, damping: 25 }}
+          className="text-center"
+        >
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          >
+            <Loader2 className="w-8 h-8 text-[#FF4F01] mx-auto mb-3" />
+          </motion.div>
+          <motion.p
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="text-[#6b6b7b] text-sm"
+          >
+            Loading distribution options...
+          </motion.p>
+        </motion.div>
       </div>
     );
   }
@@ -383,40 +483,77 @@ export default function DistributePage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-6 py-8 max-w-3xl">
-        {!survey.published && (
-          <Card className="mb-6 border-amber-200 bg-amber-50">
-            <CardContent className="p-4">
-              <p className="text-amber-800 text-sm">
-                This survey is not published yet. You need to publish it before sending invitations.
-              </p>
-            </CardContent>
-          </Card>
-        )}
+      <motion.div
+        className="container mx-auto px-6 py-8 max-w-3xl"
+        variants={pageVariants}
+        initial="initial"
+        animate="animate"
+      >
+        <AnimatePresence>
+          {!survey.published && (
+            <motion.div
+              variants={cardVariants}
+              initial="initial"
+              animate="animate"
+              exit={{ opacity: 0, y: -20 }}
+            >
+              <Card className="mb-6 border-amber-200 bg-amber-50">
+                <CardContent className="p-4">
+                  <p className="text-amber-800 text-sm">
+                    This survey is not published yet. You need to publish it before sending invitations.
+                  </p>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Share Link */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <LinkIcon className="w-5 h-5" />
-              Share Link
-            </CardTitle>
-            <CardDescription>
-              {survey.accessType === "INVITE_ONLY"
-                ? "Only invited emails can respond to this survey"
-                : "Anyone with this link can respond to your survey"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-2">
-              <Input value={surveyUrl} readOnly className="bg-white" />
-              <Button variant="outline" onClick={copyLink}>
-                {copied ? (
-                  <Check className="w-4 h-4" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
-              </Button>
+        <motion.div variants={cardVariants}>
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <LinkIcon className="w-5 h-5" />
+                Share Link
+              </CardTitle>
+              <CardDescription>
+                {survey.accessType === "INVITE_ONLY"
+                  ? "Only invited emails can respond to this survey"
+                  : "Anyone with this link can respond to your survey"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2">
+                <Input value={surveyUrl} readOnly className="bg-white" />
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Button variant="outline" onClick={copyLink}>
+                    <AnimatePresence mode="wait">
+                      {copied ? (
+                        <motion.div
+                          key="check"
+                          initial={{ scale: 0, rotate: -180 }}
+                          animate={{ scale: 1, rotate: 0 }}
+                          exit={{ scale: 0, rotate: 180 }}
+                          transition={{ type: "spring", stiffness: 500, damping: 25 }}
+                        >
+                          <Check className="w-4 h-4 text-green-500" />
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          key="copy"
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          exit={{ scale: 0 }}
+                        >
+                          <Copy className="w-4 h-4" />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </Button>
+                </motion.div>
             </div>
 
             {/* Survey Settings */}
@@ -466,18 +603,6 @@ export default function DistributePage() {
                 </label>
                 <div className="flex gap-2 flex-wrap">
                   <button
-                    onClick={() => updateSurvey({ accessType: "PUBLIC" })}
-                    disabled={updating}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${
-                      survey.accessType === "PUBLIC"
-                        ? "bg-[#1a1a2e] text-white border-[#1a1a2e]"
-                        : "bg-white text-[#6b6b7b] border-[#dcd6f6] hover:border-[#1a1a2e]"
-                    }`}
-                  >
-                    <Globe className="w-4 h-4" />
-                    Public
-                  </button>
-                  <button
                     onClick={() => updateSurvey({ accessType: "UNLISTED" })}
                     disabled={updating}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${
@@ -486,8 +611,8 @@ export default function DistributePage() {
                         : "bg-white text-[#6b6b7b] border-[#dcd6f6] hover:border-[#1a1a2e]"
                     }`}
                   >
-                    <Users className="w-4 h-4" />
-                    Unlisted
+                    <LinkIcon className="w-4 h-4" />
+                    Anyone with Link
                   </button>
                   <button
                     onClick={() => updateSurvey({ accessType: "INVITE_ONLY" })}
@@ -503,11 +628,72 @@ export default function DistributePage() {
                   </button>
                 </div>
                 <p className="text-xs text-[#6b6b7b] mt-2">
-                  {survey.accessType === "PUBLIC" && "Anyone can find and respond to this survey"}
-                  {survey.accessType === "UNLISTED" && "Only people with the link can respond"}
+                  {survey.accessType === "UNLISTED" && "Anyone with the link can respond"}
                   {survey.accessType === "INVITE_ONLY" && "Only invited emails can respond (requires sign-in)"}
                 </p>
               </div>
+
+              {/* Reminder Settings - Only show for INVITE_ONLY surveys */}
+              {survey.accessType === "INVITE_ONLY" && (
+                <div className="pt-4 border-t border-[#dcd6f6]">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-sm font-medium text-[#1a1a2e] flex items-center gap-2">
+                      <Bell className="w-4 h-4" />
+                      Automatic Reminders
+                    </label>
+                    <button
+                      onClick={() => updateSurvey({ reminderEnabled: !survey.reminderEnabled })}
+                      disabled={updating}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        survey.reminderEnabled ? "bg-[#FF4F01]" : "bg-[#dcd6f6]"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          survey.reminderEnabled ? "translate-x-6" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {survey.reminderEnabled && (
+                    <div className="space-y-3 pl-6">
+                      <div className="flex items-center gap-3">
+                        <label className="text-sm text-[#6b6b7b] min-w-[120px]">Send reminder every</label>
+                        <select
+                          value={survey.reminderIntervalDays || 3}
+                          onChange={(e) => updateSurvey({ reminderIntervalDays: parseInt(e.target.value) })}
+                          disabled={updating}
+                          className="px-3 py-1.5 rounded-lg border border-[#dcd6f6] text-sm bg-white"
+                        >
+                          <option value={1}>1 day</option>
+                          <option value={2}>2 days</option>
+                          <option value={3}>3 days</option>
+                          <option value={5}>5 days</option>
+                          <option value={7}>7 days</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <label className="text-sm text-[#6b6b7b] min-w-[120px]">Maximum reminders</label>
+                        <select
+                          value={survey.reminderMaxCount || 2}
+                          onChange={(e) => updateSurvey({ reminderMaxCount: parseInt(e.target.value) })}
+                          disabled={updating}
+                          className="px-3 py-1.5 rounded-lg border border-[#dcd6f6] text-sm bg-white"
+                        >
+                          <option value={1}>1 reminder</option>
+                          <option value={2}>2 reminders</option>
+                          <option value={3}>3 reminders</option>
+                          <option value={5}>5 reminders</option>
+                        </select>
+                      </div>
+                      <p className="text-xs text-[#6b6b7b]">
+                        Reminders are sent automatically to invitees who haven&apos;t responded yet.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -602,6 +788,152 @@ export default function DistributePage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Email Preview & Customization */}
+        <Card className="mb-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Eye className="w-5 h-5" />
+                  Email Template
+                </CardTitle>
+                <CardDescription>
+                  Customize and preview your invitation email
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowEmailPreview(!showEmailPreview)}
+              >
+                {showEmailPreview ? "Hide Preview" : "Show Preview"}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* Customization Fields */}
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Subject Line</label>
+                  <Input
+                    value={emailSubject}
+                    onChange={(e) => setEmailSubject(e.target.value)}
+                    placeholder={`You're invited: ${survey.title}`}
+                  />
+                  <p className="text-xs text-[#6b6b7b] mt-1">
+                    Leave blank for default
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Email Title</label>
+                  <Input
+                    value={emailTitle}
+                    onChange={(e) => setEmailTitle(e.target.value)}
+                    placeholder={survey.title}
+                  />
+                  <p className="text-xs text-[#6b6b7b] mt-1">
+                    The headline in the email body
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Sender Name</label>
+                  <Input
+                    value={senderName}
+                    onChange={(e) => setSenderName(e.target.value)}
+                    placeholder="Survey Team"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Custom Message (optional)</label>
+                  <Textarea
+                    value={customMessage}
+                    onChange={(e) => setCustomMessage(e.target.value)}
+                    placeholder="Add a personal note to your invitation..."
+                    rows={3}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Button Text</label>
+                    <Input
+                      value={ctaButtonText}
+                      onChange={(e) => setCtaButtonText(e.target.value)}
+                      placeholder="Take Survey →"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Time Estimate</label>
+                    <Input
+                      value={timeEstimate}
+                      onChange={(e) => setTimeEstimate(e.target.value)}
+                      placeholder="2-3 minutes"
+                    />
+                    <p className="text-xs text-[#6b6b7b] mt-1">
+                      Auto-calculated from {survey.questions?.length || 0} questions
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Preview Panel */}
+              {showEmailPreview && (
+                <div className="border rounded-lg overflow-hidden bg-[#1a1a2e]">
+                  <div className="p-2 bg-[#2d2d44] border-b border-white/10 flex items-center gap-2">
+                    <div className="flex gap-1.5">
+                      <div className="w-3 h-3 rounded-full bg-red-500/80" />
+                      <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+                      <div className="w-3 h-3 rounded-full bg-green-500/80" />
+                    </div>
+                    <span className="text-white/50 text-xs ml-2">Email Preview</span>
+                  </div>
+                  <div className="p-4 max-h-[400px] overflow-y-auto">
+                    {/* Logo */}
+                    <div className="flex justify-center mb-4">
+                      <Image
+                        src="https://cdn.prod.website-files.com/686e52cd9c00136ae69ac4d6/68751c8e13a5456b2330eb95_andus-sun-1.svg"
+                        alt="Andus Labs"
+                        width={32}
+                        height={32}
+                      />
+                    </div>
+                    {/* Mini email preview */}
+                    <div className="bg-white rounded-lg overflow-hidden shadow-lg">
+                      <div className="h-1.5 bg-gradient-to-r from-[#FF4F01] to-[#ff7033]" />
+                      <div className="p-4">
+                        <p className="text-[10px] uppercase tracking-wider text-[#FF4F01] font-semibold mb-1">
+                          Survey Invitation
+                        </p>
+                        <h3 className="font-['Syne'] font-bold text-sm text-[#1a1a2e] mb-2">
+                          {emailTitle || survey.title}
+                        </h3>
+                        {customMessage && (
+                          <p className="text-xs text-[#4a4a5a] mb-2 p-2 bg-[#f3f4f6] rounded">
+                            {customMessage}
+                          </p>
+                        )}
+                        <p className="text-xs text-[#6b6b7b] mb-3">
+                          {senderName || "Survey Team"} has invited you to share your feedback.
+                        </p>
+                        <div className="inline-block bg-gradient-to-r from-[#FF4F01] to-[#e54600] text-white text-xs font-semibold px-4 py-2 rounded-lg">
+                          {ctaButtonText || "Take Survey →"}
+                        </div>
+                        <p className="text-[10px] text-[#9ca3af] mt-3">
+                          ⏱ Takes about {timeEstimate || "2-3 minutes"}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-center text-white/30 text-[10px] mt-3">
+                      Powered by Andus Labs
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        </motion.div>
 
         {/* Email Invitations */}
         <Card className="mb-6">
@@ -710,13 +1042,25 @@ export default function DistributePage() {
             )}
           </CardContent>
         </Card>
-      </div>
+      </motion.div>
 
       {/* Group Modal */}
-      {showGroupModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
+      <AnimatePresence>
+        {showGroupModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
+            >
+              <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="font-['Syne'] font-semibold text-lg">
                   {editingGroup ? "Edit Group" : "Create New Group"}
@@ -798,9 +1142,10 @@ export default function DistributePage() {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </div>
   );
 }

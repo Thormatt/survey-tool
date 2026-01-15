@@ -460,7 +460,7 @@ function QuestionResults({
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number, name: string) => [`${value} responses`, name]}
+                    formatter={(value) => [`${value} responses`, ""]}
                     contentStyle={{
                       backgroundColor: "white",
                       border: "1px solid #dcd6f6",
@@ -514,7 +514,7 @@ function QuestionResults({
                   width={120}
                 />
                 <Tooltip
-                  formatter={(value: number) => [`${value} selections`]}
+                  formatter={(value) => [`${value} selections`]}
                   contentStyle={{
                     backgroundColor: "white",
                     border: "1px solid #dcd6f6",
@@ -571,7 +571,7 @@ function QuestionResults({
                   <XAxis dataKey="rating" tick={{ fontSize: 12, fill: "#6b6b7b" }} />
                   <YAxis tick={{ fontSize: 12, fill: "#6b6b7b" }} />
                   <Tooltip
-                    formatter={(value: number) => [`${value} responses`]}
+                    formatter={(value) => [`${value} responses`]}
                     contentStyle={{
                       backgroundColor: "white",
                       border: "1px solid #dcd6f6",
@@ -601,7 +601,7 @@ function QuestionResults({
                   <XAxis dataKey="rating" tick={{ fontSize: 12, fill: "#6b6b7b" }} />
                   <YAxis tick={{ fontSize: 12, fill: "#6b6b7b" }} />
                   <Tooltip
-                    formatter={(value: number) => [`${value} responses`]}
+                    formatter={(value) => [`${value} responses`]}
                     contentStyle={{
                       backgroundColor: "white",
                       border: "1px solid #dcd6f6",

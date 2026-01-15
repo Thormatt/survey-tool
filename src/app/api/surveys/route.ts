@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
         description,
         published: published ?? false,
         userId,
-        accessType: accessType ?? "PUBLIC",
+        accessType: accessType ?? "UNLISTED",
         isAnonymous: isAnonymous ?? true,
         closesAt: closesAt ? new Date(closesAt) : null,
       },

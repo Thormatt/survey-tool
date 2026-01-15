@@ -18,6 +18,101 @@ import {
   Check,
 } from "lucide-react";
 import Image from "next/image";
+import { motion, AnimatePresence } from "framer-motion";
+
+// Animation variants for smooth page transitions
+const pageVariants = {
+  initial: (direction: "forward" | "backward") => ({
+    x: direction === "forward" ? 100 : -100,
+    opacity: 0,
+    scale: 0.95,
+  }),
+  animate: {
+    x: 0,
+    opacity: 1,
+    scale: 1,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 30,
+      mass: 1,
+    },
+  },
+  exit: (direction: "forward" | "backward") => ({
+    x: direction === "forward" ? -100 : 100,
+    opacity: 0,
+    scale: 0.95,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 30,
+    },
+  }),
+};
+
+// Staggered children animation for options
+const containerVariants = {
+  animate: {
+    transition: {
+      staggerChildren: 0.05,
+    },
+  },
+};
+
+const itemVariants = {
+  initial: { opacity: 0, y: 20 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: "spring" as const,
+      stiffness: 400,
+      damping: 25,
+    },
+  },
+};
+
+// Button hover/tap animations
+const buttonVariants = {
+  hover: { scale: 1.02 },
+  tap: { scale: 0.98 },
+};
+
+// Option card animations
+const optionVariants = {
+  initial: { opacity: 0, x: -20 },
+  animate: {
+    opacity: 1,
+    x: 0,
+    transition: {
+      type: "spring",
+      stiffness: 400,
+      damping: 25,
+    },
+  },
+  hover: {
+    scale: 1.02,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    transition: { duration: 0.2 },
+  },
+  tap: { scale: 0.98 },
+  selected: {
+    backgroundColor: "rgba(255, 79, 1, 0.2)",
+    borderColor: "#FF4F01",
+  },
+};
+
+interface SkipCondition {
+  questionId: string;
+  operator: "equals" | "not_equals" | "contains" | "greater_than" | "less_than";
+  value: string;
+}
+
+interface SkipLogic {
+  enabled: boolean;
+  conditions: SkipCondition[];
+  logic: "all" | "any";
+}
 
 interface Question {
   id: string;
@@ -26,7 +121,9 @@ interface Question {
   description?: string;
   required: boolean;
   options?: string[];
-  settings?: Record<string, unknown>;
+  settings?: {
+    skipLogic?: SkipLogic;
+  };
 }
 
 interface Survey {
@@ -34,7 +131,7 @@ interface Survey {
   title: string;
   description?: string;
   published: boolean;
-  accessType: "PUBLIC" | "UNLISTED" | "INVITE_ONLY";
+  accessType: "UNLISTED" | "INVITE_ONLY";
   isAnonymous: boolean;
   closesAt?: string;
   questions: Question[];
@@ -190,6 +287,70 @@ export default function SurveyResponsePage() {
     return true;
   }, [survey, currentIndex, currentQuestion, answers, respondentInfo]);
 
+  // Evaluate if a question should be shown based on skip logic
+  const shouldShowQuestion = useCallback((question: Question, currentAnswers: Record<string, unknown>) => {
+    const skipLogic = question.settings?.skipLogic;
+    if (!skipLogic?.enabled || !skipLogic.conditions?.length) {
+      return true; // No skip logic, always show
+    }
+
+    const evaluateCondition = (condition: SkipCondition): boolean => {
+      const answer = currentAnswers[condition.questionId];
+      if (answer === undefined || answer === null) return false;
+
+      const answerStr = Array.isArray(answer) ? answer.join(",") : String(answer);
+      const conditionValue = condition.value;
+
+      switch (condition.operator) {
+        case "equals":
+          if (Array.isArray(answer)) {
+            return answer.includes(conditionValue);
+          }
+          return answerStr === conditionValue;
+        case "not_equals":
+          if (Array.isArray(answer)) {
+            return !answer.includes(conditionValue);
+          }
+          return answerStr !== conditionValue;
+        case "contains":
+          return answerStr.toLowerCase().includes(conditionValue.toLowerCase());
+        case "greater_than":
+          return Number(answerStr) > Number(conditionValue);
+        case "less_than":
+          return Number(answerStr) < Number(conditionValue);
+        default:
+          return true;
+      }
+    };
+
+    const results = skipLogic.conditions.map(evaluateCondition);
+    return skipLogic.logic === "any"
+      ? results.some((r) => r)
+      : results.every((r) => r);
+  }, []);
+
+  // Find the next visible question index
+  const findNextVisibleQuestion = useCallback((fromIndex: number) => {
+    if (!survey) return -1;
+    for (let i = fromIndex + 1; i < survey.questions.length; i++) {
+      if (shouldShowQuestion(survey.questions[i], answers)) {
+        return i;
+      }
+    }
+    return -1; // No more visible questions, submit
+  }, [survey, answers, shouldShowQuestion]);
+
+  // Find the previous visible question index
+  const findPrevVisibleQuestion = useCallback((fromIndex: number) => {
+    if (!survey) return -1;
+    for (let i = fromIndex - 1; i >= 0; i--) {
+      if (shouldShowQuestion(survey.questions[i], answers)) {
+        return i;
+      }
+    }
+    return -1; // No previous visible questions
+  }, [survey, answers, shouldShowQuestion]);
+
   const goNext = useCallback(() => {
     if (!survey || isAnimating || !canProceed()) return;
 
@@ -199,20 +360,30 @@ export default function SurveyResponsePage() {
     setTimeout(() => {
       if (currentIndex === -1) {
         // From welcome to either info screen or first question
-        setCurrentIndex(survey.isAnonymous ? 0 : -2);
+        if (survey.isAnonymous) {
+          // Find first visible question
+          const firstVisible = survey.questions.findIndex((q) => shouldShowQuestion(q, answers));
+          setCurrentIndex(firstVisible >= 0 ? firstVisible : survey.questions.length);
+        } else {
+          setCurrentIndex(-2);
+        }
       } else if (!survey.isAnonymous && currentIndex === -2) {
-        // From info screen to first question
-        setCurrentIndex(0);
-      } else if (currentIndex < survey.questions.length - 1) {
-        // Next question
-        setCurrentIndex(currentIndex + 1);
+        // From info screen to first visible question
+        const firstVisible = survey.questions.findIndex((q) => shouldShowQuestion(q, answers));
+        setCurrentIndex(firstVisible >= 0 ? firstVisible : survey.questions.length);
       } else {
-        // Submit
-        handleSubmit();
+        // Find next visible question
+        const nextIndex = findNextVisibleQuestion(currentIndex);
+        if (nextIndex >= 0) {
+          setCurrentIndex(nextIndex);
+        } else {
+          // No more visible questions, submit
+          handleSubmit();
+        }
       }
       setIsAnimating(false);
     }, 300);
-  }, [survey, currentIndex, isAnimating, canProceed]);
+  }, [survey, currentIndex, isAnimating, canProceed, answers, shouldShowQuestion, findNextVisibleQuestion]);
 
   const goBack = useCallback(() => {
     if (!survey || isAnimating || currentIndex === -1) return;
@@ -221,16 +392,21 @@ export default function SurveyResponsePage() {
     setDirection("backward");
 
     setTimeout(() => {
-      if (currentIndex === 0) {
-        setCurrentIndex(survey.isAnonymous ? -1 : -2);
-      } else if (!survey.isAnonymous && currentIndex === -2) {
+      if (!survey.isAnonymous && currentIndex === -2) {
         setCurrentIndex(-1);
-      } else {
-        setCurrentIndex(currentIndex - 1);
+      } else if (currentIndex >= 0) {
+        // Find previous visible question
+        const prevIndex = findPrevVisibleQuestion(currentIndex);
+        if (prevIndex >= 0) {
+          setCurrentIndex(prevIndex);
+        } else {
+          // No previous visible questions, go to welcome/info screen
+          setCurrentIndex(survey.isAnonymous ? -1 : -2);
+        }
       }
       setIsAnimating(false);
     }, 300);
-  }, [survey, currentIndex, isAnimating]);
+  }, [survey, currentIndex, isAnimating, findPrevVisibleQuestion]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -248,8 +424,11 @@ export default function SurveyResponsePage() {
   const handleSubmit = async () => {
     if (!survey) return;
 
-    // Validate all required questions
+    // Validate all required questions that are visible (not skipped)
     for (const question of survey.questions) {
+      // Skip validation for questions that aren't shown due to skip logic
+      if (!shouldShowQuestion(question, answers)) continue;
+
       if (question.required) {
         const answer = answers[question.id];
         if (answer === undefined || answer === "" || (Array.isArray(answer) && answer.length === 0)) {
@@ -377,15 +556,43 @@ export default function SurveyResponsePage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#1a1a2e] to-[#2d2d44] flex items-center justify-center p-6">
         {showConfetti && <Confetti />}
-        <div className="max-w-md w-full text-center animate-fade-in-up">
-          <div className="w-24 h-24 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-8">
-            <CheckCircle2 className="w-12 h-12 text-green-400" />
-          </div>
-          <h2 className="font-['Syne'] text-4xl font-bold text-white mb-4">Thank you!</h2>
-          <p className="text-white/60 text-lg">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 200, damping: 20, delay: 0.2 }}
+          className="max-w-md w-full text-center"
+        >
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 300, damping: 15, delay: 0.4 }}
+            className="w-24 h-24 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-8"
+          >
+            <motion.div
+              initial={{ scale: 0, rotate: -180 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 15, delay: 0.6 }}
+            >
+              <CheckCircle2 className="w-12 h-12 text-green-400" />
+            </motion.div>
+          </motion.div>
+          <motion.h2
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.7 }}
+            className="font-['Syne'] text-4xl font-bold text-white mb-4"
+          >
+            Thank you!
+          </motion.h2>
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.8 }}
+            className="text-white/60 text-lg"
+          >
             Your response has been recorded. We appreciate you taking the time to complete this survey.
-          </p>
-        </div>
+          </motion.p>
+        </motion.div>
       </div>
     );
   }
@@ -426,18 +633,18 @@ export default function SurveyResponsePage() {
 
       {/* Main content */}
       <main className="flex-1 flex items-center justify-center px-6 py-24">
-        <div
-          className={`w-full max-w-2xl transition-all duration-300 ${
-            isAnimating
-              ? direction === "forward"
-                ? "opacity-0 translate-x-8"
-                : "opacity-0 -translate-x-8"
-              : "opacity-100 translate-x-0"
-          }`}
-        >
+        <AnimatePresence mode="wait" custom={direction}>
           {/* Welcome Screen */}
           {currentIndex === -1 && (
-            <div className="text-center">
+            <motion.div
+              key="welcome"
+              custom={direction}
+              variants={pageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="w-full max-w-2xl text-center"
+            >
               <div className="w-16 h-16 rounded-2xl bg-[#FF4F01] flex items-center justify-center mx-auto mb-8">
                 <span className="text-white font-bold text-2xl">S</span>
               </div>
@@ -449,20 +656,33 @@ export default function SurveyResponsePage() {
                   {survey.description}
                 </p>
               )}
-              <Button
-                onClick={goNext}
-                size="lg"
-                className="bg-[#FF4F01] hover:bg-[#e54600] text-white px-10 py-6 text-lg rounded-xl group"
+              <motion.div
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
               >
-                Start Survey
-                <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-              </Button>
-            </div>
+                <Button
+                  onClick={goNext}
+                  size="lg"
+                  className="bg-[#FF4F01] hover:bg-[#e54600] text-white px-10 py-6 text-lg rounded-xl group"
+                >
+                  Start Survey
+                  <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                </Button>
+              </motion.div>
+            </motion.div>
           )}
 
           {/* Respondent Info Screen */}
           {!survey.isAnonymous && currentIndex === -2 && (
-            <div>
+            <motion.div
+              key="info"
+              custom={direction}
+              variants={pageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="w-full max-w-2xl"
+            >
               <p className="text-[#FF4F01] text-sm font-medium mb-4 flex items-center gap-2">
                 <Mail className="w-4 h-4" />
                 Your Information
@@ -496,12 +716,20 @@ export default function SurveyResponsePage() {
                   />
                 </div>
               </div>
-            </div>
+            </motion.div>
           )}
 
           {/* Question Screens */}
           {currentQuestion && (
-            <div>
+            <motion.div
+              key={`question-${currentQuestion.id}`}
+              custom={direction}
+              variants={pageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="w-full max-w-2xl"
+            >
               <p className="text-[#FF4F01] text-sm font-medium mb-4">
                 Question {currentIndex + 1}
                 {currentQuestion.required && <span className="text-white/40 ml-2">Required</span>}
@@ -573,136 +801,185 @@ export default function SurveyResponsePage() {
 
               {/* Single Choice */}
               {currentQuestion.type === "SINGLE_CHOICE" && currentQuestion.options && (
-                <div className="space-y-3">
+                <motion.div
+                  className="space-y-3"
+                  variants={containerVariants}
+                  initial="initial"
+                  animate="animate"
+                >
                   {currentQuestion.options.map((option, idx) => {
                     const isSelected = answers[currentQuestion.id] === option;
                     return (
-                      <button
+                      <motion.button
                         key={option}
+                        variants={itemVariants}
+                        whileHover={{ scale: 1.02, backgroundColor: isSelected ? "rgba(255, 79, 1, 0.15)" : "rgba(255, 255, 255, 0.08)" }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => {
                           updateAnswer(currentQuestion.id, option);
                           // Auto-advance after selection
                           setTimeout(goNext, 400);
                         }}
-                        className={`w-full p-5 rounded-xl border-2 text-left transition-all duration-200 flex items-center gap-4 group ${
+                        className={`w-full p-5 rounded-xl border-2 text-left flex items-center gap-4 group ${
                           isSelected
                             ? "border-[#FF4F01] bg-[#FF4F01]/10"
-                            : "border-white/10 hover:border-white/30 hover:bg-white/5"
+                            : "border-white/10"
                         }`}
                       >
-                        <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-all ${
-                          isSelected
-                            ? "bg-[#FF4F01] text-white"
-                            : "bg-white/10 text-white/60 group-hover:bg-white/20"
-                        }`}>
+                        <motion.span
+                          animate={isSelected ? { scale: 1.1 } : { scale: 1 }}
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-colors ${
+                            isSelected
+                              ? "bg-[#FF4F01] text-white"
+                              : "bg-white/10 text-white/60 group-hover:bg-white/20"
+                          }`}
+                        >
                           {isSelected ? <Check className="w-4 h-4" /> : String.fromCharCode(65 + idx)}
-                        </span>
+                        </motion.span>
                         <span className={`text-lg ${isSelected ? "text-white" : "text-white/80"}`}>
                           {option}
                         </span>
-                      </button>
+                      </motion.button>
                     );
                   })}
-                </div>
+                </motion.div>
               )}
 
               {/* Multiple Choice */}
               {currentQuestion.type === "MULTIPLE_CHOICE" && currentQuestion.options && (
-                <div className="space-y-3">
+                <motion.div
+                  className="space-y-3"
+                  variants={containerVariants}
+                  initial="initial"
+                  animate="animate"
+                >
                   {currentQuestion.options.map((option, idx) => {
                     const isSelected = ((answers[currentQuestion.id] as string[]) || []).includes(option);
                     return (
-                      <button
+                      <motion.button
                         key={option}
+                        variants={itemVariants}
+                        whileHover={{ scale: 1.02, backgroundColor: isSelected ? "rgba(255, 79, 1, 0.15)" : "rgba(255, 255, 255, 0.08)" }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => handleMultipleChoice(currentQuestion.id, option, !isSelected)}
-                        className={`w-full p-5 rounded-xl border-2 text-left transition-all duration-200 flex items-center gap-4 group ${
+                        className={`w-full p-5 rounded-xl border-2 text-left flex items-center gap-4 group ${
                           isSelected
                             ? "border-[#FF4F01] bg-[#FF4F01]/10"
-                            : "border-white/10 hover:border-white/30 hover:bg-white/5"
+                            : "border-white/10"
                         }`}
                       >
-                        <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-all ${
-                          isSelected
-                            ? "bg-[#FF4F01] text-white"
-                            : "bg-white/10 text-white/60 group-hover:bg-white/20"
-                        }`}>
+                        <motion.span
+                          animate={isSelected ? { scale: 1.1 } : { scale: 1 }}
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-colors ${
+                            isSelected
+                              ? "bg-[#FF4F01] text-white"
+                              : "bg-white/10 text-white/60 group-hover:bg-white/20"
+                          }`}
+                        >
                           {isSelected ? <Check className="w-4 h-4" /> : String.fromCharCode(65 + idx)}
-                        </span>
+                        </motion.span>
                         <span className={`text-lg ${isSelected ? "text-white" : "text-white/80"}`}>
                           {option}
                         </span>
-                      </button>
+                      </motion.button>
                     );
                   })}
-                  <p className="text-white/40 text-sm mt-4">Select all that apply</p>
-                </div>
+                  <motion.p variants={itemVariants} className="text-white/40 text-sm mt-4">Select all that apply</motion.p>
+                </motion.div>
               )}
 
               {/* Rating */}
               {currentQuestion.type === "RATING" && (
-                <div className="flex gap-3 flex-wrap">
+                <motion.div
+                  className="flex gap-3 flex-wrap"
+                  variants={containerVariants}
+                  initial="initial"
+                  animate="animate"
+                >
                   {[1, 2, 3, 4, 5].map((rating) => {
                     const isSelected = answers[currentQuestion.id] === rating;
                     return (
-                      <button
+                      <motion.button
                         key={rating}
+                        variants={itemVariants}
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.95 }}
+                        animate={isSelected ? { scale: 1.15, backgroundColor: "#FF4F01" } : { scale: 1 }}
                         onClick={() => {
                           updateAnswer(currentQuestion.id, rating);
                           setTimeout(goNext, 400);
                         }}
-                        className={`w-16 h-16 rounded-xl border-2 font-bold text-xl transition-all duration-200 ${
+                        className={`w-16 h-16 rounded-xl border-2 font-bold text-xl ${
                           isSelected
-                            ? "border-[#FF4F01] bg-[#FF4F01] text-white scale-110"
-                            : "border-white/20 text-white/60 hover:border-white/40 hover:scale-105"
+                            ? "border-[#FF4F01] bg-[#FF4F01] text-white"
+                            : "border-white/20 text-white/60"
                         }`}
                       >
                         {rating}
-                      </button>
+                      </motion.button>
                     );
                   })}
-                </div>
+                </motion.div>
               )}
 
               {/* Scale */}
               {currentQuestion.type === "SCALE" && (
                 <div>
-                  <div className="flex gap-2 flex-wrap">
+                  <motion.div
+                    className="flex gap-2 flex-wrap"
+                    variants={containerVariants}
+                    initial="initial"
+                    animate="animate"
+                  >
                     {Array.from({ length: 10 }, (_, i) => i + 1).map((value) => {
                       const isSelected = answers[currentQuestion.id] === value;
                       return (
-                        <button
+                        <motion.button
                           key={value}
+                          variants={itemVariants}
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.95 }}
+                          animate={isSelected ? { scale: 1.15, backgroundColor: "#FF4F01" } : { scale: 1 }}
                           onClick={() => {
                             updateAnswer(currentQuestion.id, value);
                             setTimeout(goNext, 400);
                           }}
-                          className={`w-12 h-12 rounded-xl border-2 font-bold transition-all duration-200 ${
+                          className={`w-12 h-12 rounded-xl border-2 font-bold ${
                             isSelected
-                              ? "border-[#FF4F01] bg-[#FF4F01] text-white scale-110"
-                              : "border-white/20 text-white/60 hover:border-white/40 hover:scale-105"
+                              ? "border-[#FF4F01] bg-[#FF4F01] text-white"
+                              : "border-white/20 text-white/60"
                           }`}
                         >
                           {value}
-                        </button>
+                        </motion.button>
                       );
                     })}
-                  </div>
-                  <div className="flex justify-between text-white/40 text-sm mt-4 px-1">
+                  </motion.div>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.5 }}
+                    className="flex justify-between text-white/40 text-sm mt-4 px-1"
+                  >
                     <span>Not at all</span>
                     <span>Extremely</span>
-                  </div>
+                  </motion.div>
                 </div>
               )}
-            </div>
-          )}
 
-          {/* Error Message */}
-          {error && (
-            <div className="mt-6 p-4 bg-red-500/20 border border-red-500/30 rounded-xl text-red-300 text-sm">
-              {error}
-            </div>
+              {/* Error Message */}
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-6 p-4 bg-red-500/20 border border-red-500/30 rounded-xl text-red-300 text-sm"
+                >
+                  {error}
+                </motion.div>
+              )}
+            </motion.div>
           )}
-        </div>
+        </AnimatePresence>
       </main>
 
       {/* Navigation Footer */}

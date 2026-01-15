@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +20,11 @@ import {
   Check,
   TrendingUp,
   BarChart3,
+  Radio,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
+import { useRealtimeResults } from "@/hooks/useRealtimeResults";
 import Link from "next/link";
 import {
   PieChart,
@@ -91,6 +96,96 @@ const GRADIENT_COLORS = {
   purple: ["#c9c1ed", "#dcd6f6"],
 };
 
+// Animation variants for staggered entry
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+      delayChildren: 0.1,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20, scale: 0.95 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 24,
+    },
+  },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 30, scale: 0.95 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      type: "spring" as const,
+      stiffness: 260,
+      damping: 20,
+    },
+  },
+  hover: {
+    y: -5,
+    scale: 1.02,
+    transition: {
+      type: "spring" as const,
+      stiffness: 400,
+      damping: 25,
+    },
+  },
+};
+
+const statsCardVariants = {
+  hidden: { opacity: 0, y: 20, scale: 0.9 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 24,
+      delay: i * 0.1,
+    },
+  }),
+  hover: {
+    y: -8,
+    scale: 1.05,
+    transition: {
+      type: "spring" as const,
+      stiffness: 400,
+      damping: 20,
+    },
+  },
+};
+
+const pageVariants = {
+  initial: { opacity: 0 },
+  animate: {
+    opacity: 1,
+    transition: {
+      duration: 0.4,
+      ease: "easeOut" as const,
+    },
+  },
+  exit: {
+    opacity: 0,
+    transition: {
+      duration: 0.2,
+    },
+  },
+};
+
 export default function SurveyResultsPage() {
   const params = useParams();
   const [survey, setSurvey] = useState<Survey | null>(null);
@@ -100,7 +195,27 @@ export default function SurveyResultsPage() {
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const [newResponsesCount, setNewResponsesCount] = useState(0);
+  const [showNewResponsesNotification, setShowNewResponsesNotification] = useState(false);
   const resultsRef = useRef<HTMLDivElement>(null);
+
+  // Real-time updates handler
+  const handleRealtimeUpdate = useCallback((updatedSurvey: unknown, newResponses: number) => {
+    setSurvey(updatedSurvey as Survey);
+    if (newResponses > 0) {
+      setNewResponsesCount((prev) => prev + newResponses);
+      setShowNewResponsesNotification(true);
+      // Auto-hide notification after 5 seconds
+      setTimeout(() => setShowNewResponsesNotification(false), 5000);
+    }
+  }, []);
+
+  // Real-time connection
+  const { isConnected } = useRealtimeResults({
+    surveyId: params.id as string,
+    enabled: !loading && !!survey,
+    onUpdate: handleRealtimeUpdate,
+  });
 
   useEffect(() => {
     async function fetchResults() {
@@ -234,10 +349,27 @@ export default function SurveyResultsPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#fbf5ea] flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-[#FF4F01] mx-auto mb-4" />
-          <p className="text-[#6b6b7b]">Loading results...</p>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: "spring", stiffness: 300, damping: 25 }}
+          className="text-center"
+        >
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          >
+            <Loader2 className="w-8 h-8 text-[#FF4F01] mx-auto mb-4" />
+          </motion.div>
+          <motion.p
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="text-[#6b6b7b]"
+          >
+            Loading results...
+          </motion.p>
+        </motion.div>
       </div>
     );
   }
@@ -281,6 +413,24 @@ export default function SurveyResultsPage() {
 
   return (
     <div className="min-h-screen bg-[#fbf5ea]">
+      {/* New Responses Notification */}
+      {showNewResponsesNotification && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-4 fade-in duration-300">
+          <div className="bg-[#FF4F01] text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
+            <Radio className="w-4 h-4 animate-pulse" />
+            <span className="font-medium">
+              {newResponsesCount} new response{newResponsesCount !== 1 ? "s" : ""} received!
+            </span>
+            <button
+              onClick={() => setShowNewResponsesNotification(false)}
+              className="ml-2 hover:bg-white/20 rounded-full p-1"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="border-b border-[#dcd6f6] bg-white/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
@@ -302,6 +452,27 @@ export default function SurveyResultsPage() {
                 {survey.isAnonymous && (
                   <Badge variant="outline" className="text-xs">Anonymous</Badge>
                 )}
+                {/* Real-time connection indicator */}
+                <div
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
+                    isConnected
+                      ? "bg-green-100 text-green-700"
+                      : "bg-gray-100 text-gray-500"
+                  }`}
+                  title={isConnected ? "Live updates active" : "Connecting..."}
+                >
+                  {isConnected ? (
+                    <>
+                      <Wifi className="w-3 h-3" />
+                      <span>Live</span>
+                    </>
+                  ) : (
+                    <>
+                      <WifiOff className="w-3 h-3" />
+                      <span>Offline</span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -367,97 +538,227 @@ export default function SurveyResultsPage() {
         </div>
       </header>
 
-      <div ref={resultsRef} className="container mx-auto px-6 py-8 max-w-5xl">
+      <motion.div
+        ref={resultsRef}
+        className="container mx-auto px-6 py-8 max-w-5xl"
+        variants={pageVariants}
+        initial="initial"
+        animate="animate"
+      >
         {/* Hero Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <Card className="bg-gradient-to-br from-[#FF4F01] to-[#FF7A33] text-white">
-            <CardContent className="p-6">
-              <Users className="w-8 h-8 mb-3 opacity-80" />
-              <div className="text-4xl font-['Syne'] font-bold">
-                {survey._count.responses}
-              </div>
-              <div className="text-sm opacity-80">Total Responses</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-to-br from-[#1a1a2e] to-[#2d2d44] text-white">
-            <CardContent className="p-6">
-              <MessageSquare className="w-8 h-8 mb-3 opacity-80" />
-              <div className="text-4xl font-['Syne'] font-bold">
-                {survey.questions.length}
-              </div>
-              <div className="text-sm opacity-80">Questions</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-to-br from-[#c9c1ed] to-[#dcd6f6]">
-            <CardContent className="p-6">
-              <TrendingUp className="w-8 h-8 mb-3 text-[#1a1a2e] opacity-80" />
-              <div className="text-4xl font-['Syne'] font-bold text-[#1a1a2e]">
-                {isNaN(completionRate) ? "—" : `${completionRate.toFixed(0)}%`}
-              </div>
-              <div className="text-sm text-[#1a1a2e] opacity-80">Completion Rate</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <BarChart3 className="w-8 h-8 mb-3 text-[#FF4F01]" />
-              <div className="text-4xl font-['Syne'] font-bold">
-                {ratingQuestions > 0 ? (avgRating / ratingQuestions).toFixed(1) : "—"}
-              </div>
-              <div className="text-sm text-[#6b6b7b]">Avg. Rating</div>
-            </CardContent>
-          </Card>
+          <motion.div
+            custom={0}
+            variants={statsCardVariants}
+            initial="hidden"
+            animate="visible"
+            whileHover="hover"
+          >
+            <Card className="bg-gradient-to-br from-[#FF4F01] to-[#FF7A33] text-white h-full">
+              <CardContent className="p-6">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 15, delay: 0.2 }}
+                >
+                  <Users className="w-8 h-8 mb-3 opacity-80" />
+                </motion.div>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="text-4xl font-['Syne'] font-bold"
+                >
+                  {survey._count.responses}
+                </motion.div>
+                <div className="text-sm opacity-80">Total Responses</div>
+              </CardContent>
+            </Card>
+          </motion.div>
+          <motion.div
+            custom={1}
+            variants={statsCardVariants}
+            initial="hidden"
+            animate="visible"
+            whileHover="hover"
+          >
+            <Card className="bg-gradient-to-br from-[#1a1a2e] to-[#2d2d44] text-white h-full">
+              <CardContent className="p-6">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 15, delay: 0.3 }}
+                >
+                  <MessageSquare className="w-8 h-8 mb-3 opacity-80" />
+                </motion.div>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
+                  className="text-4xl font-['Syne'] font-bold"
+                >
+                  {survey.questions.length}
+                </motion.div>
+                <div className="text-sm opacity-80">Questions</div>
+              </CardContent>
+            </Card>
+          </motion.div>
+          <motion.div
+            custom={2}
+            variants={statsCardVariants}
+            initial="hidden"
+            animate="visible"
+            whileHover="hover"
+          >
+            <Card className="bg-gradient-to-br from-[#c9c1ed] to-[#dcd6f6] h-full">
+              <CardContent className="p-6">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 15, delay: 0.4 }}
+                >
+                  <TrendingUp className="w-8 h-8 mb-3 text-[#1a1a2e] opacity-80" />
+                </motion.div>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
+                  className="text-4xl font-['Syne'] font-bold text-[#1a1a2e]"
+                >
+                  {isNaN(completionRate) ? "—" : `${completionRate.toFixed(0)}%`}
+                </motion.div>
+                <div className="text-sm text-[#1a1a2e] opacity-80">Completion Rate</div>
+              </CardContent>
+            </Card>
+          </motion.div>
+          <motion.div
+            custom={3}
+            variants={statsCardVariants}
+            initial="hidden"
+            animate="visible"
+            whileHover="hover"
+          >
+            <Card className="h-full">
+              <CardContent className="p-6">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 15, delay: 0.5 }}
+                >
+                  <BarChart3 className="w-8 h-8 mb-3 text-[#FF4F01]" />
+                </motion.div>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.6 }}
+                  className="text-4xl font-['Syne'] font-bold"
+                >
+                  {ratingQuestions > 0 ? (avgRating / ratingQuestions).toFixed(1) : "—"}
+                </motion.div>
+                <div className="text-sm text-[#6b6b7b]">Avg. Rating</div>
+              </CardContent>
+            </Card>
+          </motion.div>
         </div>
 
         {/* Response Timeline */}
         {survey._count.responses > 0 && (
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle className="font-['Syne'] flex items-center gap-2">
-                <Calendar className="w-5 h-5" />
-                Response Timeline
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponseTimeline survey={survey} />
-            </CardContent>
-          </Card>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.5 }}
+          >
+            <Card className="mb-8">
+              <CardHeader>
+                <CardTitle className="font-['Syne'] flex items-center gap-2">
+                  <Calendar className="w-5 h-5" />
+                  Response Timeline
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponseTimeline survey={survey} />
+              </CardContent>
+            </Card>
+          </motion.div>
         )}
 
         {survey._count.responses === 0 ? (
-          <Card>
-            <CardContent className="py-16 text-center">
-              <div className="w-16 h-16 rounded-full bg-[#dcd6f6] flex items-center justify-center mx-auto mb-4">
-                <Users className="w-8 h-8 text-[#1a1a2e]" />
-              </div>
-              <h3 className="font-['Syne'] text-lg font-semibold mb-2">
-                No responses yet
-              </h3>
-              <p className="text-[#6b6b7b] mb-6">
-                Share your survey link to start collecting responses.
-              </p>
-              <Link href={`/surveys/${survey.id}/distribute`}>
-                <Button>Distribute Survey</Button>
-              </Link>
-            </CardContent>
-          </Card>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.3 }}
+          >
+            <Card>
+              <CardContent className="py-16 text-center">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 15, delay: 0.5 }}
+                  className="w-16 h-16 rounded-full bg-[#dcd6f6] flex items-center justify-center mx-auto mb-4"
+                >
+                  <Users className="w-8 h-8 text-[#1a1a2e]" />
+                </motion.div>
+                <motion.h3
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.6 }}
+                  className="font-['Syne'] text-lg font-semibold mb-2"
+                >
+                  No responses yet
+                </motion.h3>
+                <motion.p
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.7 }}
+                  className="text-[#6b6b7b] mb-6"
+                >
+                  Share your survey link to start collecting responses.
+                </motion.p>
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.8 }}
+                >
+                  <Link href={`/surveys/${survey.id}/distribute`}>
+                    <Button>Distribute Survey</Button>
+                  </Link>
+                </motion.div>
+              </CardContent>
+            </Card>
+          </motion.div>
         ) : (
-          <div className="space-y-6">
+          <motion.div
+            className="space-y-6"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+          >
             {survey.questions.map((question, index) => (
-              <QuestionResults
+              <motion.div
                 key={question.id}
-                question={question}
-                index={index}
-                totalResponses={survey._count.responses}
-              />
+                variants={cardVariants}
+                whileHover="hover"
+              >
+                <QuestionResults
+                  question={question}
+                  index={index}
+                  totalResponses={survey._count.responses}
+                />
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         )}
 
         {/* Footer */}
-        <div className="mt-12 text-center text-sm text-[#6b6b7b]">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8 }}
+          className="mt-12 text-center text-sm text-[#6b6b7b]"
+        >
           <p>Survey created on {new Date(survey.createdAt).toLocaleDateString()}</p>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {/* Click outside to close share menu */}
       {showShareMenu && (
@@ -649,7 +950,7 @@ function QuestionResults({
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number, name: string) => [`${value} responses`, name]}
+                    formatter={(value) => [`${value} responses`, ""]}
                     contentStyle={{
                       backgroundColor: "white",
                       border: "1px solid #dcd6f6",
@@ -703,7 +1004,7 @@ function QuestionResults({
                   width={120}
                 />
                 <Tooltip
-                  formatter={(value: number) => [`${value} selections`]}
+                  formatter={(value) => [`${value} selections`]}
                   contentStyle={{
                     backgroundColor: "white",
                     border: "1px solid #dcd6f6",
@@ -760,7 +1061,7 @@ function QuestionResults({
                   <XAxis dataKey="rating" tick={{ fontSize: 12, fill: "#6b6b7b" }} />
                   <YAxis tick={{ fontSize: 12, fill: "#6b6b7b" }} />
                   <Tooltip
-                    formatter={(value: number) => [`${value} responses`]}
+                    formatter={(value) => [`${value} responses`]}
                     contentStyle={{
                       backgroundColor: "white",
                       border: "1px solid #dcd6f6",
@@ -790,7 +1091,7 @@ function QuestionResults({
                   <XAxis dataKey="rating" tick={{ fontSize: 12, fill: "#6b6b7b" }} />
                   <YAxis tick={{ fontSize: 12, fill: "#6b6b7b" }} />
                   <Tooltip
-                    formatter={(value: number) => [`${value} responses`]}
+                    formatter={(value) => [`${value} responses`]}
                     contentStyle={{
                       backgroundColor: "white",
                       border: "1px solid #dcd6f6",

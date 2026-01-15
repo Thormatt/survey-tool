@@ -9,26 +9,29 @@ datasource db {
 
 // Survey settings for response collection
 enum SurveyAccessType {
-  PUBLIC       // Listed publicly, anyone can respond
-  UNLISTED     // Only people with the direct link can respond (not discoverable)
+  UNLISTED     // Anyone with the link can respond
   INVITE_ONLY  // Only invited email addresses can respond
 }
 
 // Survey - the main survey entity
 model Survey {
-  id            String           @id @default(cuid())
-  title         String
-  description   String?
-  published     Boolean          @default(false)
-  userId        String           // Clerk user ID - survey owner
-  accessType    SurveyAccessType @default(PUBLIC)
-  isAnonymous   Boolean          @default(true) // If true, don't track respondent identity
-  closesAt      DateTime?        // Optional deadline
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  questions     Question[]
-  responses     Response[]
-  invitations   Invitation[]
+  id                   String           @id @default(cuid())
+  title                String
+  description          String?
+  published            Boolean          @default(false)
+  userId               String           // Clerk user ID - survey owner
+  accessType           SurveyAccessType @default(UNLISTED)
+  isAnonymous          Boolean          @default(true) // If true, don't track respondent identity
+  closesAt             DateTime?        // Optional deadline
+  // Reminder settings
+  reminderEnabled      Boolean          @default(false)
+  reminderIntervalDays Int              @default(3) // Days between reminders
+  reminderMaxCount     Int              @default(2) // Max reminders per invitation
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  questions            Question[]
+  responses            Response[]
+  invitations          Invitation[]
 
   @@index([published])
   @@index([userId])
@@ -36,16 +39,19 @@ model Survey {
 
 // Invitation - tracks who has been invited to a survey
 model Invitation {
-  id          String    @id @default(cuid())
-  surveyId    String
-  survey      Survey    @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  email       String
-  token       String    @unique @default(cuid()) // Magic link token
-  sentAt      DateTime  @default(now())
-  openedAt    DateTime? // When they clicked the link
-  completedAt DateTime? // When they submitted a response
-  responseId  String?   // Link to their response (if not anonymous)
-  createdAt   DateTime  @default(now())
+  id               String    @id @default(cuid())
+  surveyId         String
+  survey           Survey    @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  email            String
+  token            String    @unique @default(cuid()) // Magic link token
+  sentAt           DateTime  @default(now())
+  openedAt         DateTime? // When they clicked the link
+  completedAt      DateTime? // When they submitted a response
+  responseId       String?   // Link to their response (if not anonymous)
+  // Reminder tracking
+  reminderCount    Int       @default(0) // How many reminders have been sent
+  lastReminderAt   DateTime? // When the last reminder was sent
+  createdAt        DateTime  @default(now())
 
   @@unique([surveyId, email])
   @@index([surveyId])

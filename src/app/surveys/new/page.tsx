@@ -27,11 +27,12 @@ import {
   MessageSquare,
   Briefcase,
   Sparkles,
-  Globe,
   Link as LinkIcon,
   Lock,
   Settings,
   EyeOff,
+  GitBranch,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -63,13 +64,24 @@ type QuestionType =
   | "EMAIL"
   | "NUMBER";
 
-type AccessType = "PUBLIC" | "UNLISTED" | "INVITE_ONLY";
+type AccessType = "UNLISTED" | "INVITE_ONLY";
 
 const accessTypeOptions: { value: AccessType; label: string; description: string; icon: React.ReactNode }[] = [
-  { value: "PUBLIC", label: "Public", description: "Anyone can find and respond", icon: <Globe className="w-4 h-4" /> },
-  { value: "UNLISTED", label: "Unlisted", description: "Only people with the link", icon: <LinkIcon className="w-4 h-4" /> },
+  { value: "UNLISTED", label: "Anyone with Link", description: "Anyone with the link can respond", icon: <LinkIcon className="w-4 h-4" /> },
   { value: "INVITE_ONLY", label: "Invite Only", description: "Only invited emails", icon: <Lock className="w-4 h-4" /> },
 ];
+
+interface SkipCondition {
+  questionId: string;
+  operator: "equals" | "not_equals" | "contains" | "greater_than" | "less_than";
+  value: string;
+}
+
+interface SkipLogic {
+  enabled: boolean;
+  conditions: SkipCondition[];
+  logic: "all" | "any"; // all conditions must match, or any
+}
 
 interface Question {
   id: string;
@@ -78,6 +90,9 @@ interface Question {
   description?: string;
   required: boolean;
   options?: string[];
+  settings?: {
+    skipLogic?: SkipLogic;
+  };
 }
 
 interface SurveyTemplate {
@@ -201,6 +216,7 @@ const surveyTemplates: SurveyTemplate[] = [
 interface SortableQuestionProps {
   question: Question;
   index: number;
+  allQuestions: Question[];
   questionTypes: typeof questionTypes;
   updateQuestion: (id: string, updates: Partial<Question>) => void;
   deleteQuestion: (id: string) => void;
@@ -212,6 +228,7 @@ interface SortableQuestionProps {
 function SortableQuestion({
   question,
   index,
+  allQuestions,
   questionTypes,
   updateQuestion,
   deleteQuestion,
@@ -219,6 +236,7 @@ function SortableQuestion({
   updateOption,
   deleteOption,
 }: SortableQuestionProps) {
+  const [showSkipLogic, setShowSkipLogic] = useState(false);
   const {
     attributes,
     listeners,
@@ -233,6 +251,84 @@ function SortableQuestion({
     transition,
     opacity: isDragging ? 0.5 : 1,
     zIndex: isDragging ? 1000 : 1,
+  };
+
+  // Get previous questions that can be used for skip logic
+  const previousQuestions = allQuestions.slice(0, index);
+  const skipLogic = question.settings?.skipLogic;
+
+  const toggleSkipLogic = () => {
+    if (skipLogic?.enabled) {
+      // Disable skip logic
+      updateQuestion(question.id, {
+        settings: { ...question.settings, skipLogic: undefined },
+      });
+      setShowSkipLogic(false);
+    } else {
+      // Enable skip logic
+      setShowSkipLogic(true);
+    }
+  };
+
+  const addCondition = () => {
+    if (previousQuestions.length === 0) return;
+    const newCondition: SkipCondition = {
+      questionId: previousQuestions[0].id,
+      operator: "equals",
+      value: "",
+    };
+    updateQuestion(question.id, {
+      settings: {
+        ...question.settings,
+        skipLogic: {
+          enabled: true,
+          conditions: [...(skipLogic?.conditions || []), newCondition],
+          logic: skipLogic?.logic || "all",
+        },
+      },
+    });
+  };
+
+  const updateCondition = (conditionIndex: number, updates: Partial<SkipCondition>) => {
+    if (!skipLogic) return;
+    const newConditions = [...skipLogic.conditions];
+    newConditions[conditionIndex] = { ...newConditions[conditionIndex], ...updates };
+    updateQuestion(question.id, {
+      settings: {
+        ...question.settings,
+        skipLogic: { ...skipLogic, conditions: newConditions },
+      },
+    });
+  };
+
+  const removeCondition = (conditionIndex: number) => {
+    if (!skipLogic) return;
+    const newConditions = skipLogic.conditions.filter((_, i) => i !== conditionIndex);
+    if (newConditions.length === 0) {
+      updateQuestion(question.id, {
+        settings: { ...question.settings, skipLogic: undefined },
+      });
+      setShowSkipLogic(false);
+    } else {
+      updateQuestion(question.id, {
+        settings: {
+          ...question.settings,
+          skipLogic: { ...skipLogic, conditions: newConditions },
+        },
+      });
+    }
+  };
+
+  const getQuestionOptions = (questionId: string) => {
+    const q = allQuestions.find((q) => q.id === questionId);
+    if (!q) return [];
+    if (q.type === "SINGLE_CHOICE" || q.type === "MULTIPLE_CHOICE") {
+      return q.options || [];
+    }
+    if (q.type === "RATING") {
+      return ["1", "2", "3", "4", "5"];
+    }
+    return [];
   };
 
   return (
@@ -252,6 +348,12 @@ function SortableQuestion({
                 {questionTypes.find((t) => t.type === question.type)?.label}
               </Badge>
               <span className="text-xs text-[#6b6b7b]">Question {index + 1}</span>
+              {skipLogic?.enabled && (
+                <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
+                  <GitBranch className="w-3 h-3 mr-1" />
+                  Conditional
+                </Badge>
+              )}
             </div>
             <Input
               placeholder="Question title"
@@ -306,16 +408,154 @@ function SortableQuestion({
               </div>
             )}
 
+            {/* Skip Logic Configuration */}
+            {(showSkipLogic || skipLogic?.enabled) && previousQuestions.length > 0 && (
+              <div className="mt-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-purple-700">
+                    <GitBranch className="w-4 h-4" />
+                    Show this question only if...
+                  </div>
+                  <button
+                    onClick={() => {
+                      updateQuestion(question.id, {
+                        settings: { ...question.settings, skipLogic: undefined },
+                      });
+                      setShowSkipLogic(false);
+                    }}
+                    className="text-purple-400 hover:text-purple-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {skipLogic?.conditions && skipLogic.conditions.length > 1 && (
+                  <div className="mb-3">
+                    <select
+                      value={skipLogic.logic}
+                      onChange={(e) =>
+                        updateQuestion(question.id, {
+                          settings: {
+                            ...question.settings,
+                            skipLogic: { ...skipLogic, logic: e.target.value as "all" | "any" },
+                          },
+                        })
+                      }
+                      className="text-xs px-2 py-1 rounded border border-purple-200 bg-white text-purple-700"
+                    >
+                      <option value="all">ALL conditions match</option>
+                      <option value="any">ANY condition matches</option>
+                    </select>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {skipLogic?.conditions?.map((condition, conditionIndex) => {
+                    const sourceQuestion = previousQuestions.find((q) => q.id === condition.questionId);
+                    const hasOptions = sourceQuestion && (
+                      sourceQuestion.type === "SINGLE_CHOICE" ||
+                      sourceQuestion.type === "MULTIPLE_CHOICE" ||
+                      sourceQuestion.type === "RATING"
+                    );
+
+                    return (
+                      <div key={conditionIndex} className="flex items-center gap-2 flex-wrap">
+                        <select
+                          value={condition.questionId}
+                          onChange={(e) => updateCondition(conditionIndex, { questionId: e.target.value, value: "" })}
+                          className="text-sm px-2 py-1.5 rounded border border-purple-200 bg-white max-w-[180px]"
+                        >
+                          {previousQuestions.map((q, i) => (
+                            <option key={q.id} value={q.id}>
+                              Q{i + 1}: {q.title.slice(0, 25)}{q.title.length > 25 ? "..." : ""}
+                            </option>
+                          ))}
+                        </select>
+
+                        <select
+                          value={condition.operator}
+                          onChange={(e) => updateCondition(conditionIndex, { operator: e.target.value as SkipCondition["operator"] })}
+                          className="text-sm px-2 py-1.5 rounded border border-purple-200 bg-white"
+                        >
+                          <option value="equals">equals</option>
+                          <option value="not_equals">does not equal</option>
+                          <option value="contains">contains</option>
+                          {(sourceQuestion?.type === "NUMBER" || sourceQuestion?.type === "RATING") && (
+                            <>
+                              <option value="greater_than">greater than</option>
+                              <option value="less_than">less than</option>
+                            </>
+                          )}
+                        </select>
+
+                        {hasOptions ? (
+                          <select
+                            value={condition.value}
+                            onChange={(e) => updateCondition(conditionIndex, { value: e.target.value })}
+                            className="text-sm px-2 py-1.5 rounded border border-purple-200 bg-white max-w-[180px]"
+                          >
+                            <option value="">Select value...</option>
+                            {getQuestionOptions(condition.questionId).map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <Input
+                            value={condition.value}
+                            onChange={(e) => updateCondition(conditionIndex, { value: e.target.value })}
+                            placeholder="Value"
+                            className="h-8 w-32 text-sm"
+                          />
+                        )}
+
+                        <button
+                          onClick={() => removeCondition(conditionIndex)}
+                          className="text-purple-400 hover:text-red-500"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={addCondition}
+                  className="flex items-center gap-1 text-sm text-purple-600 hover:text-purple-800 mt-3"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add condition
+                </button>
+              </div>
+            )}
+
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#dcd6f6]">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={question.required}
-                  onChange={(e) => updateQuestion(question.id, { required: e.target.checked })}
-                  className="rounded border-[#dcd6f6]"
-                />
-                Required
-              </label>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={question.required}
+                    onChange={(e) => updateQuestion(question.id, { required: e.target.checked })}
+                    className="rounded border-[#dcd6f6]"
+                  />
+                  Required
+                </label>
+                {index > 0 && (
+                  <button
+                    onClick={toggleSkipLogic}
+                    className={`flex items-center gap-1 text-sm transition-colors ${
+                      skipLogic?.enabled
+                        ? "text-purple-600 hover:text-purple-800"
+                        : "text-[#6b6b7b] hover:text-[#1a1a2e]"
+                    }`}
+                  >
+                    <GitBranch className="w-4 h-4" />
+                    {skipLogic?.enabled ? "Edit logic" : "Add logic"}
+                  </button>
+                )}
+              </div>
               <button
                 onClick={() => deleteQuestion(question.id)}
                 className="text-[#6b6b7b] hover:text-red-500 transition-colors"
@@ -408,6 +648,7 @@ export default function NewSurveyPage() {
             description: q.description,
             required: q.required,
             options: q.options,
+            settings: q.settings,
           })),
         }),
       });
@@ -685,6 +926,7 @@ export default function NewSurveyPage() {
                   key={question.id}
                   question={question}
                   index={index}
+                  allQuestions={questions}
                   questionTypes={questionTypes}
                   updateQuestion={updateQuestion}
                   deleteQuestion={deleteQuestion}

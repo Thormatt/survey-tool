@@ -33,7 +33,6 @@ export async function POST(
           },
           select: {
             email: true,
-            respondentName: true,
           },
         },
         responses: {
