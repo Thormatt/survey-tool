@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,8 @@ import {
   TrendingUp,
   BarChart3,
   ExternalLink,
+  Radio,
+  Wifi,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -79,6 +81,62 @@ export default function PublicResultsPage() {
   const [survey, setSurvey] = useState<Survey | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [newResponsesCount, setNewResponsesCount] = useState(0);
+  const [showNotification, setShowNotification] = useState(false);
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  // Handle real-time updates
+  const handleRealtimeUpdate = useCallback((updatedSurvey: Survey, newResponses: number) => {
+    setSurvey(updatedSurvey);
+    if (newResponses > 0) {
+      setNewResponsesCount((prev) => prev + newResponses);
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 5000);
+    }
+  }, []);
+
+  // Connect to SSE for real-time updates
+  useEffect(() => {
+    if (loading || !survey) return;
+
+    const connect = () => {
+      const eventSource = new EventSource(`/api/surveys/${params.id}/results/public/stream`);
+      eventSourceRef.current = eventSource;
+
+      eventSource.onopen = () => {
+        setIsConnected(true);
+      };
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "connected") {
+            setIsConnected(true);
+          } else if (data.type === "update" && data.survey) {
+            handleRealtimeUpdate(data.survey, data.newResponses || 0);
+          }
+        } catch (err) {
+          console.error("Error parsing SSE:", err);
+        }
+      };
+
+      eventSource.onerror = () => {
+        setIsConnected(false);
+        eventSource.close();
+        // Reconnect after 3 seconds
+        setTimeout(connect, 3000);
+      };
+    };
+
+    connect();
+
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, [loading, survey, params.id, handleRealtimeUpdate]);
 
   useEffect(() => {
     async function fetchResults() {
@@ -149,6 +207,24 @@ export default function PublicResultsPage() {
 
   return (
     <div className="min-h-screen bg-[#fbf5ea]">
+      {/* New Response Notification */}
+      {showNotification && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-4 fade-in duration-300">
+          <div className="bg-[#FF4F01] text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-3">
+            <Radio className="w-5 h-5 animate-pulse" />
+            <span className="font-semibold text-lg">
+              +{newResponsesCount} new response{newResponsesCount !== 1 ? "s" : ""}!
+            </span>
+            <button
+              onClick={() => setShowNotification(false)}
+              className="ml-2 hover:bg-white/20 rounded-full p-1 text-xl"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="border-b border-[#dcd6f6] bg-white/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
@@ -156,6 +232,17 @@ export default function PublicResultsPage() {
             <div className="flex items-center gap-2 text-sm text-[#6b6b7b] mb-1">
               <span>Survey Results</span>
               <Badge variant="outline" className="text-xs">Public View</Badge>
+              {/* Live indicator */}
+              {isConnected && (
+                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">
+                  <Wifi className="w-3 h-3" />
+                  <span>Live</span>
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                  </span>
+                </div>
+              )}
             </div>
             <h1 className="font-['Syne'] font-semibold text-lg">
               {survey.title}
