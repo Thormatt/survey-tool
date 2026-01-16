@@ -62,6 +62,11 @@ interface Question {
   description?: string;
   required: boolean;
   options?: string[];
+  settings?: {
+    scaleMin?: number;
+    scaleMax?: number;
+    scaleLabels?: Record<string, string>;
+  };
   answers: Answer[];
 }
 
@@ -239,12 +244,27 @@ export default function SurveyResultsPage() {
   const exportToCSV = () => {
     if (!survey) return;
 
-    const headers = ["Response Date", ...survey.questions.map((q) => q.title)];
+    // Filter out SECTION_HEADER questions (no data) and expand MATRIX into multiple columns
+    const exportQuestions = survey.questions.filter(q => q.type !== "SECTION_HEADER");
+
+    // Build headers - MATRIX questions expand to one column per item
+    const headers = ["Response Date"];
+    exportQuestions.forEach((q) => {
+      if (q.type === "MATRIX" && q.options) {
+        // Add a column for each matrix item
+        q.options.forEach((item) => {
+          headers.push(`${q.title} - ${item}`);
+        });
+      } else {
+        headers.push(q.title);
+      }
+    });
+
     const rows: string[][] = [];
 
     const responsesMap = new Map<string, { date: string; answers: Map<string, unknown> }>();
 
-    survey.questions.forEach((question) => {
+    exportQuestions.forEach((question) => {
       question.answers.forEach((answer) => {
         const responseId = answer.response.completedAt;
         if (!responsesMap.has(responseId)) {
@@ -259,9 +279,20 @@ export default function SurveyResultsPage() {
 
     responsesMap.forEach((response) => {
       const row = [response.date];
-      survey.questions.forEach((question) => {
+      exportQuestions.forEach((question) => {
         const value = response.answers.get(question.id);
-        if (Array.isArray(value)) {
+
+        if (question.type === "MATRIX" && question.options) {
+          // Expand matrix values into separate columns
+          const matrixValue = value as Record<string, number> | null;
+          question.options.forEach((item) => {
+            if (matrixValue && matrixValue[item] !== undefined) {
+              row.push(String(matrixValue[item]));
+            } else {
+              row.push("");
+            }
+          });
+        } else if (Array.isArray(value)) {
           row.push(value.join("; "));
         } else if (value !== undefined && value !== null) {
           row.push(String(value));
@@ -775,18 +806,22 @@ function ResponseTimeline({ survey }: { survey: Survey }) {
   // Group responses by date
   const responsesByDate = new Map<string, number>();
 
-  survey.questions.forEach((question) => {
+  // Only count questions that actually collect answers (exclude SECTION_HEADER)
+  const answerableQuestions = survey.questions.filter(q => q.type !== "SECTION_HEADER");
+
+  answerableQuestions.forEach((question) => {
     question.answers.forEach((answer) => {
       const date = new Date(answer.response.completedAt).toLocaleDateString();
       responsesByDate.set(date, (responsesByDate.get(date) || 0) + 1);
     });
   });
 
-  // Normalize by number of questions
+  // Normalize by number of answerable questions (not total questions)
+  const answerableCount = answerableQuestions.length || 1; // Avoid division by zero
   const data = Array.from(responsesByDate.entries())
     .map(([date, count]) => ({
       date,
-      responses: Math.round(count / survey.questions.length),
+      responses: Math.round(count / answerableCount),
     }))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .slice(-14); // Last 14 days
@@ -898,6 +933,25 @@ function QuestionResults({
     };
   };
 
+  // Special rendering for SECTION_HEADER - it's just a visual divider
+  if (question.type === "SECTION_HEADER") {
+    return (
+      <Card className="overflow-hidden border-dashed border-2 border-[#dcd6f6] bg-gradient-to-r from-[#f5f3ff] to-[#fbf5ea]">
+        <CardHeader className="py-6">
+          <div className="text-center">
+            <CardTitle className="text-xl font-['Syne'] text-[#1a1a2e]">{question.title}</CardTitle>
+            {question.description && (
+              <CardDescription className="mt-2 text-base">{question.description}</CardDescription>
+            )}
+            <Badge variant="outline" className="text-xs mt-3">
+              Section Header
+            </Badge>
+          </div>
+        </CardHeader>
+      </Card>
+    );
+  }
+
   return (
     <Card className="overflow-hidden">
       <CardHeader className="bg-gradient-to-r from-white to-[#fbf5ea]">
@@ -990,34 +1044,36 @@ function QuestionResults({
           </div>
         )}
 
-        {/* Multiple Choice - Bar Chart */}
+        {/* Multiple Choice - List with bars (handles long labels better) */}
         {question.type === "MULTIPLE_CHOICE" && question.options && (
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={getChoiceDistribution()} layout="vertical" margin={{ left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#dcd6f6" />
-                <XAxis type="number" tick={{ fontSize: 12, fill: "#6b6b7b" }} />
-                <YAxis
-                  dataKey="name"
-                  type="category"
-                  tick={{ fontSize: 12, fill: "#6b6b7b" }}
-                  width={120}
-                />
-                <Tooltip
-                  formatter={(value) => [`${value} selections`]}
-                  contentStyle={{
-                    backgroundColor: "white",
-                    border: "1px solid #dcd6f6",
-                    borderRadius: "8px",
-                  }}
-                />
-                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                  {getChoiceDistribution().map((entry, i) => (
-                    <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {getChoiceDistribution()
+              .sort((a, b) => b.value - a.value) // Sort by count descending
+              .map((item, i) => (
+                <div key={item.name} className="flex items-center gap-3">
+                  <div
+                    className="w-3 h-3 rounded shrink-0"
+                    style={{ backgroundColor: COLORS[i % COLORS.length] }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between text-sm gap-2">
+                      <span className="font-medium truncate" title={item.name}>{item.name}</span>
+                      <span className="text-[#6b6b7b] shrink-0">
+                        {item.value} ({item.percentage.toFixed(0)}%)
+                      </span>
+                    </div>
+                    <div className="h-2 bg-[#f5f3ff] rounded-full overflow-hidden mt-1">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{
+                          width: `${item.percentage}%`,
+                          backgroundColor: COLORS[i % COLORS.length],
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
           </div>
         )}
 
@@ -1141,6 +1197,79 @@ function QuestionResults({
             )}
           </div>
         )}
+
+        {/* Matrix - Compact table with rating bars */}
+        {question.type === "MATRIX" && question.options && (() => {
+          // Parse matrix answers and calculate stats per item
+          const matrixSettings = question.settings as { scaleMin?: number; scaleMax?: number; scaleLabels?: Record<string, string> } | null;
+          const scaleMin = matrixSettings?.scaleMin ?? 1;
+          const scaleMax = matrixSettings?.scaleMax ?? 5;
+          const scaleLabels = matrixSettings?.scaleLabels ?? {};
+
+          // Calculate stats for each item
+          const itemStats = question.options.map((item) => {
+            const values: number[] = [];
+            question.answers.forEach((answer) => {
+              const answerValue = answer.value as Record<string, number> | null;
+              if (answerValue && typeof answerValue[item] === 'number') {
+                values.push(answerValue[item]);
+              }
+            });
+
+            const average = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+            return {
+              item,
+              average,
+              count: values.length,
+            };
+          }).sort((a, b) => b.average - a.average); // Sort by rating descending
+
+          return (
+            <div className="space-y-3">
+              {/* Scale legend */}
+              {(scaleLabels[scaleMin] || scaleLabels[scaleMax]) && (
+                <div className="flex justify-between text-xs text-[#6b6b7b] px-1 mb-2">
+                  <span>{scaleLabels[scaleMin] || scaleMin}</span>
+                  <span>{scaleLabels[scaleMax] || scaleMax}</span>
+                </div>
+              )}
+
+              {/* Compact items */}
+              {itemStats.map((stat) => {
+                const percentage = ((stat.average - scaleMin) / (scaleMax - scaleMin)) * 100;
+                // Color based on rating: red < 2.5, yellow 2.5-3.5, green > 3.5
+                const midpoint = (scaleMax + scaleMin) / 2;
+                const barColor = stat.average < midpoint - 0.5
+                  ? "#ef4444"
+                  : stat.average > midpoint + 0.5
+                    ? "#22c55e"
+                    : "#FF4F01";
+
+                return (
+                  <div key={stat.item} className="flex items-center gap-3">
+                    <span className="text-sm text-[#1a1a2e] w-32 md:w-40 shrink-0 truncate" title={stat.item}>
+                      {stat.item}
+                    </span>
+                    <div className="flex-1 h-4 bg-[#f5f3ff] rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${percentage}%`, backgroundColor: barColor }}
+                      />
+                    </div>
+                    <span className="text-lg font-['Syne'] font-bold w-10 text-right" style={{ color: barColor }}>
+                      {stat.average.toFixed(1)}
+                    </span>
+                  </div>
+                );
+              })}
+
+              {/* Response count footer */}
+              <div className="text-xs text-[#6b6b7b] text-right pt-2 border-t border-[#f5f3ff]">
+                {itemStats[0]?.count || 0} response{(itemStats[0]?.count || 0) !== 1 ? 's' : ''}
+              </div>
+            </div>
+          );
+        })()}
       </CardContent>
     </Card>
   );

@@ -69,6 +69,8 @@ enum QuestionType {
   DATE
   EMAIL
   NUMBER
+  SECTION_HEADER  // Display-only section break (no input)
+  MATRIX          // Grid rating - rate multiple items on same scale
 }
 
 // Question - individual questions in a survey

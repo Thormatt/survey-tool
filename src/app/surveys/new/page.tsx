@@ -33,6 +33,8 @@ import {
   EyeOff,
   GitBranch,
   X,
+  LayoutList,
+  Grid3X3,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -62,7 +64,9 @@ type QuestionType =
   | "SCALE"
   | "DATE"
   | "EMAIL"
-  | "NUMBER";
+  | "NUMBER"
+  | "SECTION_HEADER"
+  | "MATRIX";
 
 type AccessType = "UNLISTED" | "INVITE_ONLY";
 
@@ -92,6 +96,10 @@ interface Question {
   options?: string[];
   settings?: {
     skipLogic?: SkipLogic;
+    // Matrix-specific settings
+    scaleMin?: number;
+    scaleMax?: number;
+    scaleLabels?: Record<number, string>;
   };
 }
 
@@ -111,10 +119,12 @@ const questionTypes: {
   icon: React.ReactNode;
   description: string;
 }[] = [
+  { type: "SECTION_HEADER", label: "Section Header", icon: <LayoutList className="w-4 h-4" />, description: "Section break" },
   { type: "SHORT_TEXT", label: "Short Text", icon: <Type className="w-4 h-4" />, description: "Single line text" },
   { type: "LONG_TEXT", label: "Long Text", icon: <AlignLeft className="w-4 h-4" />, description: "Multi-line text" },
   { type: "SINGLE_CHOICE", label: "Single Choice", icon: <CircleDot className="w-4 h-4" />, description: "Pick one option" },
   { type: "MULTIPLE_CHOICE", label: "Multiple Choice", icon: <CheckSquare className="w-4 h-4" />, description: "Pick multiple" },
+  { type: "MATRIX", label: "Matrix / Grid", icon: <Grid3X3 className="w-4 h-4" />, description: "Rate multiple items" },
   { type: "RATING", label: "Rating", icon: <Star className="w-4 h-4" />, description: "Star rating" },
   { type: "NUMBER", label: "Number", icon: <Hash className="w-4 h-4" />, description: "Numeric input" },
   { type: "DATE", label: "Date", icon: <Calendar className="w-4 h-4" />, description: "Date picker" },
@@ -408,6 +418,109 @@ function SortableQuestion({
               </div>
             )}
 
+            {/* Section Header Preview */}
+            {question.type === "SECTION_HEADER" && (
+              <div className="mt-4 p-4 border-l-4 border-[#FF4F01] bg-[#fff8f0] rounded-r-lg">
+                <p className="text-sm text-[#6b6b7b] italic">
+                  This section header will display as a visual break in the survey.
+                  No response required from respondents.
+                </p>
+              </div>
+            )}
+
+            {/* Matrix Question Builder */}
+            {question.type === "MATRIX" && (
+              <div className="mt-4 space-y-4">
+                {/* Scale Configuration */}
+                <div className="flex items-center gap-4 p-3 bg-[#f5f3ff] rounded-lg">
+                  <span className="text-sm font-medium">Scale:</span>
+                  <select
+                    value={question.settings?.scaleMin || 1}
+                    onChange={(e) => updateQuestion(question.id, {
+                      settings: { ...question.settings, scaleMin: parseInt(e.target.value) }
+                    })}
+                    className="text-sm px-2 py-1 border rounded"
+                  >
+                    {[0, 1].map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <span>to</span>
+                  <select
+                    value={question.settings?.scaleMax || 5}
+                    onChange={(e) => updateQuestion(question.id, {
+                      settings: { ...question.settings, scaleMax: parseInt(e.target.value) }
+                    })}
+                    className="text-sm px-2 py-1 border rounded"
+                  >
+                    {[3, 4, 5, 7, 10].map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </div>
+
+                {/* Matrix Items (Rows) */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Items to rate:</label>
+                  {question.options?.map((item, itemIndex) => (
+                    <div key={itemIndex} className="flex items-center gap-2">
+                      <Grid3X3 className="w-4 h-4 text-[#6b6b7b]" />
+                      <Input
+                        value={item}
+                        onChange={(e) => updateOption(question.id, itemIndex, e.target.value)}
+                        className="flex-1 h-8 text-sm"
+                        placeholder={`Item ${itemIndex + 1}`}
+                      />
+                      <button
+                        onClick={() => deleteOption(question.id, itemIndex)}
+                        className="text-[#6b6b7b] hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => addOption(question.id)}
+                    className="flex items-center gap-2 text-sm text-[#6b6b7b] hover:text-[#1a1a2e] transition-colors mt-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add item
+                  </button>
+                </div>
+
+                {/* Matrix Preview */}
+                <div className="mt-4 p-3 bg-white rounded-lg border border-[#dcd6f6] overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr>
+                        <th className="text-left p-2"></th>
+                        {Array.from({ length: (question.settings?.scaleMax || 5) - (question.settings?.scaleMin || 1) + 1 }, (_, i) => (
+                          <th key={i} className="p-2 text-center text-[#6b6b7b]">
+                            {(question.settings?.scaleMin || 1) + i}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {question.options?.slice(0, 3).map((item, i) => (
+                        <tr key={i} className="border-t border-[#dcd6f6]">
+                          <td className="p-2">{item || `Item ${i + 1}`}</td>
+                          {Array.from({ length: (question.settings?.scaleMax || 5) - (question.settings?.scaleMin || 1) + 1 }, (_, j) => (
+                            <td key={j} className="p-2 text-center">
+                              <div className="w-4 h-4 rounded-full border-2 border-[#dcd6f6] mx-auto" />
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                      {(question.options?.length || 0) > 3 && (
+                        <tr className="border-t border-[#dcd6f6]">
+                          <td colSpan={100} className="p-2 text-center text-[#6b6b7b] text-xs">
+                            + {(question.options?.length || 0) - 3} more items
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* Skip Logic Configuration */}
             {(showSkipLogic || skipLogic?.enabled) && previousQuestions.length > 0 && (
               <div className="mt-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
@@ -533,16 +646,20 @@ function SortableQuestion({
 
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#dcd6f6]">
               <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={question.required}
-                    onChange={(e) => updateQuestion(question.id, { required: e.target.checked })}
-                    className="rounded border-[#dcd6f6]"
-                  />
-                  Required
-                </label>
-                {index > 0 && (
+                {/* Hide Required checkbox for SECTION_HEADER */}
+                {question.type !== "SECTION_HEADER" && (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={question.required}
+                      onChange={(e) => updateQuestion(question.id, { required: e.target.checked })}
+                      className="rounded border-[#dcd6f6]"
+                    />
+                    Required
+                  </label>
+                )}
+                {/* Hide skip logic for SECTION_HEADER (it has no answer to base logic on) */}
+                {index > 0 && question.type !== "SECTION_HEADER" && (
                   <button
                     onClick={toggleSkipLogic}
                     className={`flex items-center gap-1 text-sm transition-colors ${
@@ -672,8 +789,17 @@ export default function NewSurveyPage() {
       id: crypto.randomUUID(),
       type,
       title: "",
-      required: false,
-      options: type === "SINGLE_CHOICE" || type === "MULTIPLE_CHOICE" ? ["Option 1", "Option 2"] : undefined,
+      // SECTION_HEADER should never be required
+      required: type === "SECTION_HEADER" ? false : false,
+      options:
+        type === "SINGLE_CHOICE" || type === "MULTIPLE_CHOICE"
+          ? ["Option 1", "Option 2"]
+          : type === "MATRIX"
+          ? ["Item 1", "Item 2", "Item 3"]
+          : undefined,
+      settings: type === "MATRIX"
+        ? { scaleMin: 1, scaleMax: 5, scaleLabels: { 1: "Poor", 5: "Excellent" } }
+        : undefined,
     };
     setQuestions([...questions, newQuestion]);
     setShowQuestionTypes(false);

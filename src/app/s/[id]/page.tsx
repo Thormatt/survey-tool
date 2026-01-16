@@ -123,6 +123,10 @@ interface Question {
   options?: string[];
   settings?: {
     skipLogic?: SkipLogic;
+    // Matrix-specific settings
+    scaleMin?: number;
+    scaleMax?: number;
+    scaleLabels?: Record<number, string>;
   };
 }
 
@@ -245,8 +249,12 @@ export default function SurveyResponsePage() {
     }
   }, [currentIndex]);
 
-  const totalSteps = survey ? survey.questions.length + (survey.isAnonymous ? 0 : 1) : 0;
-  const currentStep = survey?.isAnonymous ? currentIndex + 1 : currentIndex + 2;
+  // Count only answerable questions (exclude SECTION_HEADER)
+  const answerableQuestions = survey?.questions.filter(q => q.type !== "SECTION_HEADER") || [];
+  const totalSteps = survey ? answerableQuestions.length + (survey.isAnonymous ? 0 : 1) : 0;
+  // Calculate current step excluding SECTION_HEADER questions already passed
+  const questionsBeforeCurrent = survey?.questions.slice(0, Math.max(0, currentIndex + 1)).filter(q => q.type !== "SECTION_HEADER") || [];
+  const currentStep = survey?.isAnonymous ? questionsBeforeCurrent.length : questionsBeforeCurrent.length + 1;
   const progress = totalSteps > 0 ? Math.max(0, (currentStep / totalSteps) * 100) : 0;
 
   const currentQuestion = survey && currentIndex >= 0 ? survey.questions[currentIndex] : null;
@@ -277,6 +285,18 @@ export default function SurveyResponsePage() {
 
     // Question screens
     if (currentIndex >= 0 && currentQuestion) {
+      // SECTION_HEADER always allows proceeding (no answer needed)
+      if (currentQuestion.type === "SECTION_HEADER") return true;
+
+      // MATRIX validation - ensure all items have been rated if required
+      if (currentQuestion.type === "MATRIX" && currentQuestion.required) {
+        const answer = answers[currentQuestion.id] as Record<string, number> | undefined;
+        if (!answer) return false;
+        // Ensure all items have been rated
+        const requiredItems = currentQuestion.options || [];
+        return requiredItems.every(item => answer[item] !== undefined);
+      }
+
       if (!currentQuestion.required) return true;
       const answer = answers[currentQuestion.id];
       if (answer === undefined || answer === "" || (Array.isArray(answer) && answer.length === 0)) {
@@ -730,15 +750,30 @@ export default function SurveyResponsePage() {
               exit="exit"
               className="w-full max-w-2xl"
             >
+              {/* Question number - skip counting for SECTION_HEADER */}
               <p className="text-[#FF4F01] text-sm font-medium mb-4">
-                Question {currentIndex + 1}
-                {currentQuestion.required && <span className="text-white/40 ml-2">Required</span>}
+                {currentQuestion.type === "SECTION_HEADER" ? (
+                  "Section"
+                ) : (
+                  <>
+                    Question {survey!.questions.slice(0, currentIndex + 1).filter(q => q.type !== "SECTION_HEADER").length}
+                    {currentQuestion.required && <span className="text-white/40 ml-2">Required</span>}
+                  </>
+                )}
               </p>
               <h2 className="font-['Syne'] text-3xl md:text-4xl font-bold text-white mb-3 leading-tight">
                 {currentQuestion.title}
               </h2>
               {currentQuestion.description && (
-                <p className="text-white/50 mb-10">{currentQuestion.description}</p>
+                currentQuestion.type === "SECTION_HEADER" ? (
+                  <p className="text-lg md:text-xl text-white/70 mb-10 italic leading-relaxed">
+                    <span className="text-[#FF4F01]">&ldquo;</span>
+                    {currentQuestion.description}
+                    <span className="text-[#FF4F01]">&rdquo;</span>
+                  </p>
+                ) : (
+                  <p className="text-white/50 mb-10">{currentQuestion.description}</p>
+                )
               )}
 
               {/* Short Text */}
@@ -965,6 +1000,98 @@ export default function SurveyResponsePage() {
                     <span>Extremely</span>
                   </motion.div>
                 </div>
+              )}
+
+              {/* Section Header - Display Only */}
+              {currentQuestion.type === "SECTION_HEADER" && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-center py-8"
+                >
+                  <div className="w-16 h-1 bg-[#FF4F01] mx-auto mb-8 rounded-full" />
+                  <p className="text-white/30 text-sm mt-4">
+                    Press Enter or click OK to continue
+                  </p>
+                </motion.div>
+              )}
+
+              {/* Matrix Question */}
+              {currentQuestion.type === "MATRIX" && currentQuestion.options && (
+                <motion.div
+                  variants={containerVariants}
+                  initial="initial"
+                  animate="animate"
+                  className="w-full overflow-x-auto"
+                >
+                  <table className="w-full min-w-[400px]">
+                    <thead>
+                      <tr>
+                        <th className="text-left p-3 text-white/60"></th>
+                        {Array.from(
+                          { length: ((currentQuestion.settings as { scaleMax?: number })?.scaleMax || 5) -
+                                    ((currentQuestion.settings as { scaleMin?: number })?.scaleMin || 1) + 1 },
+                          (_, i) => ((currentQuestion.settings as { scaleMin?: number })?.scaleMin || 1) + i
+                        ).map((value) => (
+                          <th key={value} className="p-3 w-14 text-center text-white/60 text-sm font-normal">
+                            {value}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentQuestion.options.map((item) => {
+                        const matrixAnswers = (answers[currentQuestion.id] as Record<string, number>) || {};
+                        return (
+                          <motion.tr
+                            key={item}
+                            variants={itemVariants}
+                            className="border-t border-white/10"
+                          >
+                            <td className="p-3 text-white">{item}</td>
+                            {Array.from(
+                              { length: ((currentQuestion.settings as { scaleMax?: number })?.scaleMax || 5) -
+                                        ((currentQuestion.settings as { scaleMin?: number })?.scaleMin || 1) + 1 },
+                              (_, i) => ((currentQuestion.settings as { scaleMin?: number })?.scaleMin || 1) + i
+                            ).map((value) => {
+                              const isSelected = matrixAnswers[item] === value;
+                              return (
+                                <td key={value} className="p-3 w-14">
+                                  <div className="flex justify-center">
+                                    <motion.button
+                                      whileHover={{ scale: 1.2 }}
+                                      whileTap={{ scale: 0.9 }}
+                                      onClick={() => {
+                                        const newAnswers = { ...matrixAnswers, [item]: value };
+                                        updateAnswer(currentQuestion.id, newAnswers);
+                                      }}
+                                      className={`w-8 h-8 rounded-full border-2 transition-all flex items-center justify-center ${
+                                        isSelected
+                                          ? "border-[#FF4F01] bg-[#FF4F01]"
+                                          : "border-white/30 hover:border-white/60"
+                                      }`}
+                                    >
+                                      {isSelected && <Check className="w-4 h-4 text-white" />}
+                                    </motion.button>
+                                  </div>
+                                </td>
+                              );
+                            })}
+                          </motion.tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  {/* Scale labels */}
+                  <motion.div
+                    variants={itemVariants}
+                    className="flex justify-between text-white/40 text-sm mt-4 px-3"
+                  >
+                    <span>{(currentQuestion.settings as { scaleLabels?: Record<number, string> })?.scaleLabels?.[1] || "Low"}</span>
+                    <span>{(currentQuestion.settings as { scaleLabels?: Record<number, string> })?.scaleLabels?.[5] || "High"}</span>
+                  </motion.div>
+                </motion.div>
               )}
 
               {/* Error Message */}

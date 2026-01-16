@@ -16,6 +16,7 @@ import {
   Trash2,
   AlertTriangle,
   X,
+  Copy,
 } from "lucide-react";
 import Link from "next/link";
 import { CopyLinkButton } from "./copy-link-button";
@@ -46,6 +47,7 @@ export default function SurveyPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
 
   const deleteSurvey = async () => {
     if (deleteConfirmation.toLowerCase() !== "delete") return;
@@ -60,6 +62,21 @@ export default function SurveyPage() {
     } catch {
       setError("Failed to delete survey");
       setDeleting(false);
+    }
+  };
+
+  const duplicateSurvey = async () => {
+    setDuplicating(true);
+    try {
+      const res = await fetch(`/api/surveys/${params.id}/duplicate`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Failed to duplicate");
+      const newSurvey = await res.json();
+      router.push(`/surveys/${newSurvey.id}`);
+    } catch {
+      setError("Failed to duplicate survey");
+      setDuplicating(false);
     }
   };
 
@@ -140,6 +157,19 @@ export default function SurveyPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={duplicateSurvey}
+              disabled={duplicating}
+            >
+              {duplicating ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Copy className="w-4 h-4 mr-2" />
+              )}
+              Duplicate
+            </Button>
             <Link href={`/surveys/${survey.id}/distribute`}>
               <Button variant="outline" size="sm">
                 <Share2 className="w-4 h-4 mr-2" />
