@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   X,
   Copy,
+  Pencil,
 } from "lucide-react";
 import Link from "next/link";
 import { CopyLinkButton } from "./copy-link-button";
@@ -157,6 +158,14 @@ export default function SurveyPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {!survey.published && (
+              <Link href={`/surveys/${survey.id}/edit`}>
+                <Button variant="outline" size="sm">
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Edit
+                </Button>
+              </Link>
+            )}
             <Button
               variant="outline"
               size="sm"

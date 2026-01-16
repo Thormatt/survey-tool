@@ -4,13 +4,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Plus, FileText, Users, ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { auth } from "@clerk/nextjs/server";
 
 // Force dynamic rendering to always show fresh data
 export const dynamic = "force-dynamic";
 
-async function getSurveys() {
+async function getSurveys(userId: string) {
   try {
     const surveys = await db.survey.findMany({
+      where: { userId },
       include: {
         _count: {
           select: { responses: true, questions: true },
@@ -25,7 +27,15 @@ async function getSurveys() {
 }
 
 export default async function SurveysPage() {
-  const surveys = await getSurveys();
+  const { userId } = await auth();
+  if (!userId) {
+    return (
+      <div className="min-h-screen bg-[#fbf5ea] flex items-center justify-center">
+        <p className="text-[#6b6b7b]">Please sign in to view your surveys.</p>
+      </div>
+    );
+  }
+  const surveys = await getSurveys(userId);
 
   return (
     <div className="min-h-screen bg-[#fbf5ea]">
