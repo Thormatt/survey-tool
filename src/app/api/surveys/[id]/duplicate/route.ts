@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { Prisma } from "@/generated/prisma/client";
 
 export async function POST(
   request: NextRequest,
@@ -54,8 +55,8 @@ export async function POST(
           description: question.description,
           required: question.required,
           order: question.order,
-          options: question.options,
-          settings: question.settings,
+          options: question.options as Prisma.InputJsonValue | undefined,
+          settings: question.settings as Prisma.InputJsonValue | undefined,
         },
       });
     }
