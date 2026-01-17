@@ -29,6 +29,16 @@ import {
   X,
   LayoutList,
   Grid3X3,
+  Phone,
+  Clock,
+  ChevronDown,
+  ToggleLeft,
+  Image,
+  Gauge,
+  ThumbsUp,
+  SlidersHorizontal,
+  ListOrdered,
+  PieChart,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -60,7 +70,17 @@ type QuestionType =
   | "EMAIL"
   | "NUMBER"
   | "SECTION_HEADER"
-  | "MATRIX";
+  | "MATRIX"
+  | "PHONE"
+  | "TIME"
+  | "DROPDOWN"
+  | "YES_NO"
+  | "IMAGE_CHOICE"
+  | "NPS"
+  | "LIKERT"
+  | "SLIDER"
+  | "RANKING"
+  | "CONSTANT_SUM";
 
 type AccessType = "UNLISTED" | "INVITE_ONLY";
 
@@ -93,6 +113,14 @@ interface Question {
     scaleMin?: number;
     scaleMax?: number;
     scaleLabels?: Record<number, string>;
+    minLabel?: string;
+    maxLabel?: string;
+    min?: number;
+    max?: number;
+    step?: number;
+    scale?: string[];
+    total?: number;
+    imageUrls?: Record<string, string>;
   };
 }
 
@@ -101,17 +129,35 @@ const questionTypes: {
   label: string;
   icon: React.ReactNode;
   description: string;
+  category?: string;
 }[] = [
-  { type: "SECTION_HEADER", label: "Section Header", icon: <LayoutList className="w-4 h-4" />, description: "Section break" },
-  { type: "SHORT_TEXT", label: "Short Text", icon: <Type className="w-4 h-4" />, description: "Single line text" },
-  { type: "LONG_TEXT", label: "Long Text", icon: <AlignLeft className="w-4 h-4" />, description: "Multi-line text" },
-  { type: "SINGLE_CHOICE", label: "Single Choice", icon: <CircleDot className="w-4 h-4" />, description: "Pick one option" },
-  { type: "MULTIPLE_CHOICE", label: "Multiple Choice", icon: <CheckSquare className="w-4 h-4" />, description: "Pick multiple" },
-  { type: "MATRIX", label: "Matrix / Grid", icon: <Grid3X3 className="w-4 h-4" />, description: "Rate multiple items" },
-  { type: "RATING", label: "Rating", icon: <Star className="w-4 h-4" />, description: "Star rating" },
-  { type: "NUMBER", label: "Number", icon: <Hash className="w-4 h-4" />, description: "Numeric input" },
-  { type: "DATE", label: "Date", icon: <Calendar className="w-4 h-4" />, description: "Date picker" },
-  { type: "EMAIL", label: "Email", icon: <Mail className="w-4 h-4" />, description: "Email address" },
+  // Display
+  { type: "SECTION_HEADER", label: "Section Header", icon: <LayoutList className="w-4 h-4" />, description: "Section break", category: "Display" },
+  // Text inputs
+  { type: "SHORT_TEXT", label: "Short Text", icon: <Type className="w-4 h-4" />, description: "Single line text", category: "Text" },
+  { type: "LONG_TEXT", label: "Long Text", icon: <AlignLeft className="w-4 h-4" />, description: "Multi-line text", category: "Text" },
+  { type: "EMAIL", label: "Email", icon: <Mail className="w-4 h-4" />, description: "Email address", category: "Text" },
+  { type: "PHONE", label: "Phone", icon: <Phone className="w-4 h-4" />, description: "Phone number", category: "Text" },
+  { type: "NUMBER", label: "Number", icon: <Hash className="w-4 h-4" />, description: "Numeric input", category: "Text" },
+  // Date/Time
+  { type: "DATE", label: "Date", icon: <Calendar className="w-4 h-4" />, description: "Date picker", category: "Date/Time" },
+  { type: "TIME", label: "Time", icon: <Clock className="w-4 h-4" />, description: "Time picker", category: "Date/Time" },
+  // Choice
+  { type: "SINGLE_CHOICE", label: "Single Choice", icon: <CircleDot className="w-4 h-4" />, description: "Pick one option", category: "Choice" },
+  { type: "MULTIPLE_CHOICE", label: "Multiple Choice", icon: <CheckSquare className="w-4 h-4" />, description: "Pick multiple", category: "Choice" },
+  { type: "DROPDOWN", label: "Dropdown", icon: <ChevronDown className="w-4 h-4" />, description: "Select from list", category: "Choice" },
+  { type: "YES_NO", label: "Yes/No", icon: <ToggleLeft className="w-4 h-4" />, description: "Simple toggle", category: "Choice" },
+  { type: "IMAGE_CHOICE", label: "Image Choice", icon: <Image className="w-4 h-4" />, description: "Pick from images", category: "Choice" },
+  // Rating/Scale
+  { type: "RATING", label: "Rating", icon: <Star className="w-4 h-4" />, description: "Star rating", category: "Rating" },
+  { type: "SCALE", label: "Scale", icon: <SlidersHorizontal className="w-4 h-4" />, description: "Linear scale", category: "Rating" },
+  { type: "NPS", label: "NPS", icon: <Gauge className="w-4 h-4" />, description: "Net Promoter Score", category: "Rating" },
+  { type: "LIKERT", label: "Likert", icon: <ThumbsUp className="w-4 h-4" />, description: "Opinion scale", category: "Rating" },
+  { type: "SLIDER", label: "Slider", icon: <SlidersHorizontal className="w-4 h-4" />, description: "Visual slider", category: "Rating" },
+  // Advanced
+  { type: "MATRIX", label: "Matrix / Grid", icon: <Grid3X3 className="w-4 h-4" />, description: "Rate multiple items", category: "Advanced" },
+  { type: "RANKING", label: "Ranking", icon: <ListOrdered className="w-4 h-4" />, description: "Drag to order", category: "Advanced" },
+  { type: "CONSTANT_SUM", label: "Constant Sum", icon: <PieChart className="w-4 h-4" />, description: "Distribute points", category: "Advanced" },
 ];
 
 interface SortableQuestionProps {
@@ -401,6 +447,347 @@ function SortableQuestion({
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )}
+
+            {/* Phone preview */}
+            {question.type === "PHONE" && (
+              <div className="mt-4">
+                <div className="flex items-center gap-2 p-3 border border-[#dcd6f6] rounded-lg bg-white/50">
+                  <Phone className="w-4 h-4 text-[#6b6b7b]" />
+                  <span className="text-[#6b6b7b] text-sm">+1 (555) 123-4567</span>
+                </div>
+              </div>
+            )}
+
+            {/* Time preview */}
+            {question.type === "TIME" && (
+              <div className="mt-4">
+                <div className="flex items-center gap-2 p-3 border border-[#dcd6f6] rounded-lg bg-white/50">
+                  <Clock className="w-4 h-4 text-[#6b6b7b]" />
+                  <span className="text-[#6b6b7b] text-sm">09:00 AM</span>
+                </div>
+              </div>
+            )}
+
+            {/* Dropdown preview */}
+            {question.type === "DROPDOWN" && (
+              <div className="mt-4 space-y-2">
+                {question.options?.map((option, optionIndex) => (
+                  <div key={optionIndex} className="flex items-center gap-2">
+                    <ChevronDown className="w-4 h-4 text-[#6b6b7b]" />
+                    <Input
+                      value={option}
+                      onChange={(e) => updateOption(question.id, optionIndex, e.target.value)}
+                      className="flex-1 h-8 text-sm"
+                    />
+                    <button
+                      onClick={() => deleteOption(question.id, optionIndex)}
+                      className="text-[#6b6b7b] hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => addOption(question.id)}
+                  className="flex items-center gap-2 text-sm text-[#6b6b7b] hover:text-[#1a1a2e] transition-colors mt-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add option
+                </button>
+              </div>
+            )}
+
+            {/* Yes/No preview */}
+            {question.type === "YES_NO" && (
+              <div className="mt-4 flex gap-4">
+                <div className="flex items-center gap-2 px-4 py-2 border-2 border-[#dcd6f6] rounded-lg">
+                  <div className="w-4 h-4 rounded-full border-2 border-[#dcd6f6]" />
+                  <span className="text-sm">Yes</span>
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 border-2 border-[#dcd6f6] rounded-lg">
+                  <div className="w-4 h-4 rounded-full border-2 border-[#dcd6f6]" />
+                  <span className="text-sm">No</span>
+                </div>
+              </div>
+            )}
+
+            {/* NPS preview */}
+            {question.type === "NPS" && (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={question.settings?.minLabel || "Not at all likely"}
+                    onChange={(e) => updateQuestion(question.id, {
+                      settings: { ...question.settings, minLabel: e.target.value }
+                    })}
+                    className="flex-1 h-8 text-sm"
+                    placeholder="Min label"
+                  />
+                  <span className="text-[#6b6b7b]">to</span>
+                  <Input
+                    value={question.settings?.maxLabel || "Extremely likely"}
+                    onChange={(e) => updateQuestion(question.id, {
+                      settings: { ...question.settings, maxLabel: e.target.value }
+                    })}
+                    className="flex-1 h-8 text-sm"
+                    placeholder="Max label"
+                  />
+                </div>
+                <div className="flex justify-between">
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                    <div
+                      key={n}
+                      className={`w-8 h-8 rounded flex items-center justify-center text-xs font-medium border ${
+                        n <= 6 ? "border-red-200 bg-red-50" :
+                        n <= 8 ? "border-yellow-200 bg-yellow-50" :
+                        "border-green-200 bg-green-50"
+                      }`}
+                    >
+                      {n}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Likert preview */}
+            {question.type === "LIKERT" && (
+              <div className="mt-4 space-y-3">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Scale options:</label>
+                  {(question.settings?.scale || ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"]).map((item, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="w-6 text-center text-xs text-[#6b6b7b]">{i + 1}</span>
+                      <Input
+                        value={item}
+                        onChange={(e) => {
+                          const newScale = [...(question.settings?.scale || [])];
+                          newScale[i] = e.target.value;
+                          updateQuestion(question.id, {
+                            settings: { ...question.settings, scale: newScale }
+                          });
+                        }}
+                        className="flex-1 h-8 text-sm"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-between gap-2 p-3 bg-white rounded-lg border border-[#dcd6f6]">
+                  {(question.settings?.scale || ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"]).map((label, i) => (
+                    <div key={i} className="flex flex-col items-center gap-1 flex-1">
+                      <div className="w-4 h-4 rounded-full border-2 border-[#dcd6f6]" />
+                      <span className="text-xs text-[#6b6b7b] text-center">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Slider preview */}
+            {question.type === "SLIDER" && (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm">Min:</label>
+                    <Input
+                      type="number"
+                      value={question.settings?.min || 0}
+                      onChange={(e) => updateQuestion(question.id, {
+                        settings: { ...question.settings, min: parseInt(e.target.value) }
+                      })}
+                      className="w-20 h-8 text-sm"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm">Max:</label>
+                    <Input
+                      type="number"
+                      value={question.settings?.max || 100}
+                      onChange={(e) => updateQuestion(question.id, {
+                        settings: { ...question.settings, max: parseInt(e.target.value) }
+                      })}
+                      className="w-20 h-8 text-sm"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm">Step:</label>
+                    <Input
+                      type="number"
+                      value={question.settings?.step || 1}
+                      onChange={(e) => updateQuestion(question.id, {
+                        settings: { ...question.settings, step: parseInt(e.target.value) }
+                      })}
+                      className="w-20 h-8 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="p-3 bg-white rounded-lg border border-[#dcd6f6]">
+                  <input
+                    type="range"
+                    min={question.settings?.min || 0}
+                    max={question.settings?.max || 100}
+                    step={question.settings?.step || 1}
+                    className="w-full"
+                    disabled
+                  />
+                  <div className="flex justify-between text-xs text-[#6b6b7b] mt-1">
+                    <span>{question.settings?.min || 0}</span>
+                    <span>{question.settings?.max || 100}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Scale preview */}
+            {question.type === "SCALE" && (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center gap-4 p-3 bg-[#f5f3ff] rounded-lg">
+                  <span className="text-sm font-medium">Scale:</span>
+                  <select
+                    value={question.settings?.scaleMin || 1}
+                    onChange={(e) => updateQuestion(question.id, {
+                      settings: { ...question.settings, scaleMin: parseInt(e.target.value) }
+                    })}
+                    className="text-sm px-2 py-1 border rounded"
+                  >
+                    {[0, 1].map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <span>to</span>
+                  <select
+                    value={question.settings?.scaleMax || 10}
+                    onChange={(e) => updateQuestion(question.id, {
+                      settings: { ...question.settings, scaleMax: parseInt(e.target.value) }
+                    })}
+                    className="text-sm px-2 py-1 border rounded"
+                  >
+                    {[5, 7, 10].map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </div>
+                <div className="flex justify-between gap-1">
+                  {Array.from({ length: (question.settings?.scaleMax || 10) - (question.settings?.scaleMin || 1) + 1 }, (_, i) => (
+                    <div
+                      key={i}
+                      className="flex-1 h-10 rounded border-2 border-[#dcd6f6] flex items-center justify-center text-sm font-medium"
+                    >
+                      {(question.settings?.scaleMin || 1) + i}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Ranking preview */}
+            {question.type === "RANKING" && (
+              <div className="mt-4 space-y-2">
+                <p className="text-xs text-[#6b6b7b] mb-2">Respondents will drag to rank these items:</p>
+                {question.options?.map((option, optionIndex) => (
+                  <div key={optionIndex} className="flex items-center gap-2">
+                    <GripVertical className="w-4 h-4 text-[#6b6b7b]" />
+                    <span className="w-6 h-6 rounded-full bg-[#dcd6f6] flex items-center justify-center text-xs font-medium">
+                      {optionIndex + 1}
+                    </span>
+                    <Input
+                      value={option}
+                      onChange={(e) => updateOption(question.id, optionIndex, e.target.value)}
+                      className="flex-1 h-8 text-sm"
+                    />
+                    <button
+                      onClick={() => deleteOption(question.id, optionIndex)}
+                      className="text-[#6b6b7b] hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => addOption(question.id)}
+                  className="flex items-center gap-2 text-sm text-[#6b6b7b] hover:text-[#1a1a2e] transition-colors mt-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add item
+                </button>
+              </div>
+            )}
+
+            {/* Constant Sum preview */}
+            {question.type === "CONSTANT_SUM" && (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center gap-2 p-3 bg-[#f5f3ff] rounded-lg">
+                  <span className="text-sm font-medium">Total points to distribute:</span>
+                  <Input
+                    type="number"
+                    value={question.settings?.total || 100}
+                    onChange={(e) => updateQuestion(question.id, {
+                      settings: { ...question.settings, total: parseInt(e.target.value) }
+                    })}
+                    className="w-24 h-8 text-sm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  {question.options?.map((option, optionIndex) => (
+                    <div key={optionIndex} className="flex items-center gap-2">
+                      <Input
+                        value={option}
+                        onChange={(e) => updateOption(question.id, optionIndex, e.target.value)}
+                        className="flex-1 h-8 text-sm"
+                      />
+                      <div className="w-20 h-8 border border-[#dcd6f6] rounded flex items-center justify-center text-sm text-[#6b6b7b]">
+                        0
+                      </div>
+                      <button
+                        onClick={() => deleteOption(question.id, optionIndex)}
+                        className="text-[#6b6b7b] hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => addOption(question.id)}
+                    className="flex items-center gap-2 text-sm text-[#6b6b7b] hover:text-[#1a1a2e] transition-colors mt-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add category
+                  </button>
+                </div>
+                <p className="text-xs text-[#6b6b7b]">
+                  Respondents must allocate exactly {question.settings?.total || 100} points across all categories.
+                </p>
+              </div>
+            )}
+
+            {/* Image Choice preview */}
+            {question.type === "IMAGE_CHOICE" && (
+              <div className="mt-4 space-y-2">
+                <p className="text-xs text-[#6b6b7b] mb-2">Add images for each option (respondents select one):</p>
+                {question.options?.map((option, optionIndex) => (
+                  <div key={optionIndex} className="flex items-center gap-2">
+                    <div className="w-16 h-16 border-2 border-dashed border-[#dcd6f6] rounded-lg flex items-center justify-center bg-white">
+                      <Image className="w-6 h-6 text-[#6b6b7b]" />
+                    </div>
+                    <Input
+                      value={option}
+                      onChange={(e) => updateOption(question.id, optionIndex, e.target.value)}
+                      className="flex-1 h-8 text-sm"
+                      placeholder="Image label"
+                    />
+                    <button
+                      onClick={() => deleteOption(question.id, optionIndex)}
+                      className="text-[#6b6b7b] hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => addOption(question.id)}
+                  className="flex items-center gap-2 text-sm text-[#6b6b7b] hover:text-[#1a1a2e] transition-colors mt-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add image option
+                </button>
               </div>
             )}
 
@@ -697,20 +1084,53 @@ export default function EditSurveyPage() {
   };
 
   const addQuestion = (type: QuestionType) => {
+    let options: string[] | undefined;
+    let settings: Question["settings"] | undefined;
+
+    switch (type) {
+      case "SINGLE_CHOICE":
+      case "MULTIPLE_CHOICE":
+        options = ["Option 1", "Option 2"];
+        break;
+      case "DROPDOWN":
+        options = ["Option 1", "Option 2", "Option 3"];
+        break;
+      case "IMAGE_CHOICE":
+        options = ["Image 1", "Image 2", "Image 3"];
+        settings = { imageUrls: {} };
+        break;
+      case "MATRIX":
+        options = ["Item 1", "Item 2", "Item 3"];
+        settings = { scaleMin: 1, scaleMax: 5, scaleLabels: { 1: "Poor", 5: "Excellent" } };
+        break;
+      case "RANKING":
+        options = ["Item 1", "Item 2", "Item 3"];
+        break;
+      case "CONSTANT_SUM":
+        options = ["Category 1", "Category 2", "Category 3"];
+        settings = { total: 100 };
+        break;
+      case "SCALE":
+        settings = { scaleMin: 1, scaleMax: 10, scaleLabels: { 1: "Low", 10: "High" } };
+        break;
+      case "NPS":
+        settings = { minLabel: "Not at all likely", maxLabel: "Extremely likely" };
+        break;
+      case "LIKERT":
+        settings = { scale: ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] };
+        break;
+      case "SLIDER":
+        settings = { min: 0, max: 100, step: 1 };
+        break;
+    }
+
     const newQuestion: Question = {
       id: crypto.randomUUID(),
       type,
       title: "",
       required: type === "SECTION_HEADER" ? false : false,
-      options:
-        type === "SINGLE_CHOICE" || type === "MULTIPLE_CHOICE"
-          ? ["Option 1", "Option 2"]
-          : type === "MATRIX"
-          ? ["Item 1", "Item 2", "Item 3"]
-          : undefined,
-      settings: type === "MATRIX"
-        ? { scaleMin: 1, scaleMax: 5, scaleLabels: { 1: "Poor", 5: "Excellent" } }
-        : undefined,
+      options,
+      settings,
     };
     setQuestions([...questions, newQuestion]);
     setShowQuestionTypes(false);

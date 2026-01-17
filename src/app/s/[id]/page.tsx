@@ -16,6 +16,10 @@ import {
   ArrowRight,
   ArrowLeft,
   Check,
+  Phone,
+  Clock,
+  ChevronDown,
+  GripVertical,
 } from "lucide-react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
@@ -123,10 +127,23 @@ interface Question {
   options?: string[];
   settings?: {
     skipLogic?: SkipLogic;
-    // Matrix-specific settings
+    // Matrix/Scale settings
     scaleMin?: number;
     scaleMax?: number;
     scaleLabels?: Record<number, string>;
+    // NPS settings
+    minLabel?: string;
+    maxLabel?: string;
+    // Slider settings
+    min?: number;
+    max?: number;
+    step?: number;
+    // Likert settings
+    scale?: string[];
+    // Constant Sum settings
+    total?: number;
+    // Image Choice settings
+    imageUrls?: Record<string, string>;
   };
 }
 
@@ -295,6 +312,22 @@ export default function SurveyResponsePage() {
         // Ensure all items have been rated
         const requiredItems = currentQuestion.options || [];
         return requiredItems.every(item => answer[item] !== undefined);
+      }
+
+      // RANKING validation - ensure all items have been ranked if required
+      if (currentQuestion.type === "RANKING" && currentQuestion.required) {
+        const answer = answers[currentQuestion.id] as string[] | undefined;
+        if (!answer) return false;
+        return answer.length === (currentQuestion.options?.length || 0);
+      }
+
+      // CONSTANT_SUM validation - ensure sum equals total
+      if (currentQuestion.type === "CONSTANT_SUM" && currentQuestion.required) {
+        const answer = answers[currentQuestion.id] as Record<string, number> | undefined;
+        if (!answer) return false;
+        const total = currentQuestion.settings?.total || 100;
+        const sum = Object.values(answer).reduce((a, b) => a + b, 0);
+        return sum === total;
       }
 
       if (!currentQuestion.required) return true;
@@ -1091,6 +1124,450 @@ export default function SurveyResponsePage() {
                     <span>{(currentQuestion.settings as { scaleLabels?: Record<number, string> })?.scaleLabels?.[1] || "Low"}</span>
                     <span>{(currentQuestion.settings as { scaleLabels?: Record<number, string> })?.scaleLabels?.[5] || "High"}</span>
                   </motion.div>
+                </motion.div>
+              )}
+
+              {/* Phone */}
+              {currentQuestion.type === "PHONE" && (
+                <div className="flex items-center gap-3">
+                  <Phone className="w-6 h-6 text-white/40" />
+                  <Input
+                    ref={inputRef as React.RefObject<HTMLInputElement>}
+                    type="tel"
+                    value={(answers[currentQuestion.id] as string) || ""}
+                    onChange={(e) => updateAnswer(currentQuestion.id, e.target.value)}
+                    placeholder="+1 (555) 000-0000"
+                    className="bg-transparent border-0 border-b-2 border-white/20 rounded-none text-white text-2xl placeholder:text-white/30 h-16 focus:border-[#FF4F01] focus:ring-0 px-0 flex-1"
+                  />
+                </div>
+              )}
+
+              {/* Time */}
+              {currentQuestion.type === "TIME" && (
+                <div className="flex items-center gap-3">
+                  <Clock className="w-6 h-6 text-white/40" />
+                  <Input
+                    ref={inputRef as React.RefObject<HTMLInputElement>}
+                    type="time"
+                    value={(answers[currentQuestion.id] as string) || ""}
+                    onChange={(e) => updateAnswer(currentQuestion.id, e.target.value)}
+                    className="bg-white/5 border-white/10 text-white text-lg h-14 rounded-xl focus:border-[#FF4F01] focus:ring-[#FF4F01] w-48"
+                  />
+                </div>
+              )}
+
+              {/* Dropdown */}
+              {currentQuestion.type === "DROPDOWN" && currentQuestion.options && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="relative"
+                >
+                  <select
+                    value={(answers[currentQuestion.id] as string) || ""}
+                    onChange={(e) => {
+                      updateAnswer(currentQuestion.id, e.target.value);
+                      if (e.target.value) {
+                        setTimeout(goNext, 400);
+                      }
+                    }}
+                    className="w-full p-5 rounded-xl border-2 border-white/10 bg-white/5 text-white text-lg appearance-none cursor-pointer focus:border-[#FF4F01] focus:ring-0 focus:outline-none"
+                  >
+                    <option value="" className="bg-[#1a1a2e]">Select an option...</option>
+                    {currentQuestion.options.map((option) => (
+                      <option key={option} value={option} className="bg-[#1a1a2e]">
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40 pointer-events-none" />
+                </motion.div>
+              )}
+
+              {/* Yes/No Toggle */}
+              {currentQuestion.type === "YES_NO" && (
+                <motion.div
+                  className="flex gap-4"
+                  variants={containerVariants}
+                  initial="initial"
+                  animate="animate"
+                >
+                  {["Yes", "No"].map((option) => {
+                    const isSelected = answers[currentQuestion.id] === option;
+                    return (
+                      <motion.button
+                        key={option}
+                        variants={itemVariants}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => {
+                          updateAnswer(currentQuestion.id, option);
+                          setTimeout(goNext, 400);
+                        }}
+                        className={`flex-1 p-6 rounded-xl border-2 text-xl font-bold transition-all ${
+                          isSelected
+                            ? option === "Yes"
+                              ? "border-green-500 bg-green-500/20 text-green-400"
+                              : "border-red-400 bg-red-500/20 text-red-400"
+                            : "border-white/10 text-white/60 hover:border-white/30"
+                        }`}
+                      >
+                        {option}
+                      </motion.button>
+                    );
+                  })}
+                </motion.div>
+              )}
+
+              {/* NPS - Net Promoter Score (0-10) */}
+              {currentQuestion.type === "NPS" && (
+                <div>
+                  <motion.div
+                    className="flex gap-2 flex-wrap justify-center"
+                    variants={containerVariants}
+                    initial="initial"
+                    animate="animate"
+                  >
+                    {Array.from({ length: 11 }, (_, i) => i).map((value) => {
+                      const isSelected = answers[currentQuestion.id] === value;
+                      let colorClass = "border-white/20 text-white/60";
+                      if (isSelected) {
+                        if (value <= 6) colorClass = "border-red-500 bg-red-500 text-white";
+                        else if (value <= 8) colorClass = "border-yellow-500 bg-yellow-500 text-white";
+                        else colorClass = "border-green-500 bg-green-500 text-white";
+                      }
+                      return (
+                        <motion.button
+                          key={value}
+                          variants={itemVariants}
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => {
+                            updateAnswer(currentQuestion.id, value);
+                            setTimeout(goNext, 400);
+                          }}
+                          className={`w-12 h-12 rounded-xl border-2 font-bold ${colorClass}`}
+                        >
+                          {value}
+                        </motion.button>
+                      );
+                    })}
+                  </motion.div>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.5 }}
+                    className="flex justify-between text-white/40 text-sm mt-4 px-1"
+                  >
+                    <span>{currentQuestion.settings?.minLabel || "Not at all likely"}</span>
+                    <span>{currentQuestion.settings?.maxLabel || "Extremely likely"}</span>
+                  </motion.div>
+                </div>
+              )}
+
+              {/* Likert Scale */}
+              {currentQuestion.type === "LIKERT" && (
+                <motion.div
+                  className="space-y-3"
+                  variants={containerVariants}
+                  initial="initial"
+                  animate="animate"
+                >
+                  {(currentQuestion.settings?.scale || [
+                    "Strongly Disagree",
+                    "Disagree",
+                    "Neutral",
+                    "Agree",
+                    "Strongly Agree",
+                  ]).map((option, idx) => {
+                    const isSelected = answers[currentQuestion.id] === option;
+                    return (
+                      <motion.button
+                        key={option}
+                        variants={itemVariants}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => {
+                          updateAnswer(currentQuestion.id, option);
+                          setTimeout(goNext, 400);
+                        }}
+                        className={`w-full p-5 rounded-xl border-2 text-left flex items-center gap-4 group ${
+                          isSelected
+                            ? "border-[#FF4F01] bg-[#FF4F01]/10"
+                            : "border-white/10"
+                        }`}
+                      >
+                        <span
+                          className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
+                            isSelected
+                              ? "bg-[#FF4F01] text-white"
+                              : "bg-white/10 text-white/60"
+                          }`}
+                        >
+                          {isSelected ? <Check className="w-4 h-4" /> : idx + 1}
+                        </span>
+                        <span className={`text-lg ${isSelected ? "text-white" : "text-white/80"}`}>
+                          {option}
+                        </span>
+                      </motion.button>
+                    );
+                  })}
+                </motion.div>
+              )}
+
+              {/* Slider */}
+              {currentQuestion.type === "SLIDER" && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="space-y-6"
+                >
+                  <div className="relative">
+                    <input
+                      type="range"
+                      min={currentQuestion.settings?.min || 0}
+                      max={currentQuestion.settings?.max || 100}
+                      step={currentQuestion.settings?.step || 1}
+                      value={(answers[currentQuestion.id] as number) || currentQuestion.settings?.min || 0}
+                      onChange={(e) => updateAnswer(currentQuestion.id, Number(e.target.value))}
+                      className="w-full h-3 bg-white/10 rounded-full appearance-none cursor-pointer
+                        [&::-webkit-slider-thumb]:appearance-none
+                        [&::-webkit-slider-thumb]:w-8
+                        [&::-webkit-slider-thumb]:h-8
+                        [&::-webkit-slider-thumb]:rounded-full
+                        [&::-webkit-slider-thumb]:bg-[#FF4F01]
+                        [&::-webkit-slider-thumb]:cursor-pointer
+                        [&::-webkit-slider-thumb]:shadow-lg
+                        [&::-webkit-slider-thumb]:border-4
+                        [&::-webkit-slider-thumb]:border-white/20
+                        [&::-moz-range-thumb]:w-8
+                        [&::-moz-range-thumb]:h-8
+                        [&::-moz-range-thumb]:rounded-full
+                        [&::-moz-range-thumb]:bg-[#FF4F01]
+                        [&::-moz-range-thumb]:cursor-pointer
+                        [&::-moz-range-thumb]:border-4
+                        [&::-moz-range-thumb]:border-white/20"
+                    />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-white/40 text-sm">{currentQuestion.settings?.min || 0}</span>
+                    <span className="text-white text-4xl font-bold">
+                      {answers[currentQuestion.id] !== undefined
+                        ? String(answers[currentQuestion.id])
+                        : currentQuestion.settings?.min || 0}
+                    </span>
+                    <span className="text-white/40 text-sm">{currentQuestion.settings?.max || 100}</span>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Ranking - Drag to reorder */}
+              {currentQuestion.type === "RANKING" && currentQuestion.options && (
+                <motion.div
+                  variants={containerVariants}
+                  initial="initial"
+                  animate="animate"
+                  className="space-y-3"
+                >
+                  <p className="text-white/40 text-sm mb-4">Click items in order of preference (1st = most preferred)</p>
+                  {(() => {
+                    const rankedItems = (answers[currentQuestion.id] as string[]) || [];
+                    const unrankedItems = currentQuestion.options!.filter(
+                      (item) => !rankedItems.includes(item)
+                    );
+
+                    return (
+                      <>
+                        {/* Ranked items */}
+                        {rankedItems.map((item, idx) => (
+                          <motion.div
+                            key={`ranked-${item}`}
+                            variants={itemVariants}
+                            className="flex items-center gap-3 p-4 rounded-xl border-2 border-[#FF4F01] bg-[#FF4F01]/10"
+                          >
+                            <span className="w-8 h-8 rounded-full bg-[#FF4F01] text-white flex items-center justify-center font-bold text-sm">
+                              {idx + 1}
+                            </span>
+                            <span className="text-white flex-1">{item}</span>
+                            <button
+                              onClick={() => {
+                                const newRanked = rankedItems.filter((i) => i !== item);
+                                updateAnswer(currentQuestion.id, newRanked);
+                              }}
+                              className="text-white/40 hover:text-white transition-colors"
+                            >
+                              ✕
+                            </button>
+                          </motion.div>
+                        ))}
+
+                        {/* Unranked items */}
+                        {unrankedItems.map((item) => (
+                          <motion.button
+                            key={`unranked-${item}`}
+                            variants={itemVariants}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => {
+                              const newRanked = [...rankedItems, item];
+                              updateAnswer(currentQuestion.id, newRanked);
+                            }}
+                            className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-white/10 hover:border-white/30 transition-colors"
+                          >
+                            <GripVertical className="w-5 h-5 text-white/40" />
+                            <span className="text-white/80">{item}</span>
+                          </motion.button>
+                        ))}
+                      </>
+                    );
+                  })()}
+                </motion.div>
+              )}
+
+              {/* Constant Sum - Distribute points */}
+              {currentQuestion.type === "CONSTANT_SUM" && currentQuestion.options && (
+                <motion.div
+                  variants={containerVariants}
+                  initial="initial"
+                  animate="animate"
+                  className="space-y-4"
+                >
+                  {(() => {
+                    const total = currentQuestion.settings?.total || 100;
+                    const values = (answers[currentQuestion.id] as Record<string, number>) || {};
+                    const currentSum = Object.values(values).reduce((a, b) => a + b, 0);
+                    const remaining = total - currentSum;
+
+                    return (
+                      <>
+                        <div className="flex justify-between items-center mb-6">
+                          <span className="text-white/60 text-sm">Distribute {total} points</span>
+                          <span className={`text-lg font-bold ${remaining === 0 ? "text-green-400" : remaining < 0 ? "text-red-400" : "text-white"}`}>
+                            {remaining} remaining
+                          </span>
+                        </div>
+
+                        {currentQuestion.options!.map((item) => (
+                          <motion.div
+                            key={item}
+                            variants={itemVariants}
+                            className="flex items-center gap-4 p-4 rounded-xl border-2 border-white/10 bg-white/5"
+                          >
+                            <span className="text-white flex-1 min-w-[120px]">{item}</span>
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => {
+                                  const current = values[item] || 0;
+                                  if (current > 0) {
+                                    updateAnswer(currentQuestion.id, {
+                                      ...values,
+                                      [item]: current - 1,
+                                    });
+                                  }
+                                }}
+                                className="w-10 h-10 rounded-lg bg-white/10 text-white/60 hover:bg-white/20 transition-colors flex items-center justify-center text-xl"
+                              >
+                                −
+                              </button>
+                              <Input
+                                type="number"
+                                min={0}
+                                max={total}
+                                value={values[item] || 0}
+                                onChange={(e) => {
+                                  const val = Math.max(0, parseInt(e.target.value) || 0);
+                                  updateAnswer(currentQuestion.id, {
+                                    ...values,
+                                    [item]: val,
+                                  });
+                                }}
+                                className="w-20 text-center bg-white/5 border-white/10 text-white text-lg h-10 rounded-lg"
+                              />
+                              <button
+                                onClick={() => {
+                                  const current = values[item] || 0;
+                                  if (currentSum < total) {
+                                    updateAnswer(currentQuestion.id, {
+                                      ...values,
+                                      [item]: current + 1,
+                                    });
+                                  }
+                                }}
+                                className="w-10 h-10 rounded-lg bg-white/10 text-white/60 hover:bg-white/20 transition-colors flex items-center justify-center text-xl"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </motion.div>
+                        ))}
+
+                        {/* Progress bar */}
+                        <div className="mt-4">
+                          <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all ${remaining === 0 ? "bg-green-500" : remaining < 0 ? "bg-red-500" : "bg-[#FF4F01]"}`}
+                              style={{ width: `${Math.min(100, (currentSum / total) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </motion.div>
+              )}
+
+              {/* Image Choice */}
+              {currentQuestion.type === "IMAGE_CHOICE" && currentQuestion.options && (
+                <motion.div
+                  className="grid grid-cols-2 gap-4"
+                  variants={containerVariants}
+                  initial="initial"
+                  animate="animate"
+                >
+                  {currentQuestion.options.map((option) => {
+                    const isSelected = answers[currentQuestion.id] === option;
+                    const imageUrl = currentQuestion.settings?.imageUrls?.[option];
+                    return (
+                      <motion.button
+                        key={option}
+                        variants={itemVariants}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => {
+                          updateAnswer(currentQuestion.id, option);
+                          setTimeout(goNext, 400);
+                        }}
+                        className={`relative overflow-hidden rounded-xl border-2 aspect-square ${
+                          isSelected
+                            ? "border-[#FF4F01] ring-2 ring-[#FF4F01]"
+                            : "border-white/10 hover:border-white/30"
+                        }`}
+                      >
+                        {imageUrl ? (
+                          <Image
+                            src={imageUrl}
+                            alt={option}
+                            fill
+                            className="object-cover"
+                          />
+                        ) : (
+                          <div className="absolute inset-0 bg-white/5 flex items-center justify-center">
+                            <span className="text-white/40 text-sm">No image</span>
+                          </div>
+                        )}
+                        <div className={`absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 to-transparent ${
+                          isSelected ? "bg-[#FF4F01]/80" : ""
+                        }`}>
+                          <span className="text-white text-sm font-medium">{option}</span>
+                        </div>
+                        {isSelected && (
+                          <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-[#FF4F01] flex items-center justify-center">
+                            <Check className="w-5 h-5 text-white" />
+                          </div>
+                        )}
+                      </motion.button>
+                    );
+                  })}
                 </motion.div>
               )}
 

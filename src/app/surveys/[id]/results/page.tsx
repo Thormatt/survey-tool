@@ -66,6 +66,14 @@ interface Question {
     scaleMin?: number;
     scaleMax?: number;
     scaleLabels?: Record<string, string>;
+    minLabel?: string;
+    maxLabel?: string;
+    min?: number;
+    max?: number;
+    step?: number;
+    scale?: string[];
+    total?: number;
+    imageUrls?: Record<string, string>;
   };
   answers: Answer[];
 }
@@ -247,11 +255,11 @@ export default function SurveyResultsPage() {
     // Filter out SECTION_HEADER questions (no data) and expand MATRIX into multiple columns
     const exportQuestions = survey.questions.filter(q => q.type !== "SECTION_HEADER");
 
-    // Build headers - MATRIX questions expand to one column per item
+    // Build headers - MATRIX and CONSTANT_SUM questions expand to one column per item
     const headers = ["Response Date"];
     exportQuestions.forEach((q) => {
-      if (q.type === "MATRIX" && q.options) {
-        // Add a column for each matrix item
+      if ((q.type === "MATRIX" || q.type === "CONSTANT_SUM") && q.options) {
+        // Add a column for each matrix/sum item
         q.options.forEach((item) => {
           headers.push(`${q.title} - ${item}`);
         });
@@ -292,6 +300,19 @@ export default function SurveyResultsPage() {
               row.push("");
             }
           });
+        } else if (question.type === "CONSTANT_SUM" && question.options) {
+          // Similar to MATRIX - expand into separate columns
+          const sumValue = value as Record<string, number> | null;
+          question.options.forEach((item) => {
+            if (sumValue && sumValue[item] !== undefined) {
+              row.push(String(sumValue[item]));
+            } else {
+              row.push("0");
+            }
+          });
+        } else if (question.type === "RANKING" && Array.isArray(value)) {
+          // Show as ordered list: "1. Item, 2. Item, ..."
+          row.push((value as string[]).map((item, idx) => `${idx + 1}. ${item}`).join("; "));
         } else if (Array.isArray(value)) {
           row.push(value.join("; "));
         } else if (value !== undefined && value !== null) {
@@ -1173,7 +1194,9 @@ function QuestionResults({
           question.type === "LONG_TEXT" ||
           question.type === "EMAIL" ||
           question.type === "NUMBER" ||
-          question.type === "DATE") && (
+          question.type === "DATE" ||
+          question.type === "PHONE" ||
+          question.type === "TIME") && (
           <div className="space-y-3 max-h-80 overflow-y-auto">
             {question.answers.length === 0 ? (
               <p className="text-[#6b6b7b] text-sm italic text-center py-8">No responses yet</p>
@@ -1197,6 +1220,330 @@ function QuestionResults({
             )}
           </div>
         )}
+
+        {/* Dropdown, Likert, Image Choice - Same as Single Choice (Pie Chart) */}
+        {(question.type === "DROPDOWN" || question.type === "LIKERT" || question.type === "IMAGE_CHOICE") && question.options && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={getChoiceDistribution()}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    {getChoiceDistribution().map((entry, i) => (
+                      <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value) => [`${value} responses`, ""]}
+                    contentStyle={{
+                      backgroundColor: "white",
+                      border: "1px solid #dcd6f6",
+                      borderRadius: "8px",
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="space-y-2">
+              {getChoiceDistribution().map((item, i) => (
+                <div key={item.name} className="flex items-center gap-3">
+                  <div
+                    className="w-4 h-4 rounded"
+                    style={{ backgroundColor: COLORS[i % COLORS.length] }}
+                  />
+                  <div className="flex-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium">{item.name}</span>
+                      <span className="text-[#6b6b7b]">
+                        {item.value} ({item.percentage.toFixed(0)}%)
+                      </span>
+                    </div>
+                    <div className="h-2 bg-[#f5f3ff] rounded-full overflow-hidden mt-1">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{
+                          width: `${item.percentage}%`,
+                          backgroundColor: COLORS[i % COLORS.length],
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Yes/No - Simple two-item visualization */}
+        {question.type === "YES_NO" && (() => {
+          const counts = { Yes: 0, No: 0 };
+          question.answers.forEach((answer) => {
+            if (answer.value === "Yes") counts.Yes++;
+            else if (answer.value === "No") counts.No++;
+          });
+          const total = counts.Yes + counts.No;
+          const yesPercent = total > 0 ? (counts.Yes / total) * 100 : 0;
+          const noPercent = total > 0 ? (counts.No / total) * 100 : 0;
+
+          return (
+            <div className="flex gap-4">
+              <div className="flex-1 p-6 rounded-xl bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200 text-center">
+                <div className="text-4xl font-['Syne'] font-bold text-green-600">{counts.Yes}</div>
+                <div className="text-lg font-medium text-green-700">Yes</div>
+                <div className="text-sm text-green-600">{yesPercent.toFixed(0)}%</div>
+              </div>
+              <div className="flex-1 p-6 rounded-xl bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-200 text-center">
+                <div className="text-4xl font-['Syne'] font-bold text-red-600">{counts.No}</div>
+                <div className="text-lg font-medium text-red-700">No</div>
+                <div className="text-sm text-red-600">{noPercent.toFixed(0)}%</div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* NPS - Special with Promoters/Passives/Detractors */}
+        {question.type === "NPS" && (() => {
+          const distribution = Array.from({ length: 11 }, (_, i) => ({ score: i, count: 0 }));
+          let detractors = 0, passives = 0, promoters = 0;
+
+          question.answers.forEach((answer) => {
+            const value = Number(answer.value);
+            if (!isNaN(value) && value >= 0 && value <= 10) {
+              distribution[value].count++;
+              if (value <= 6) detractors++;
+              else if (value <= 8) passives++;
+              else promoters++;
+            }
+          });
+
+          const total = detractors + passives + promoters;
+          const npsScore = total > 0 ? ((promoters - detractors) / total) * 100 : 0;
+
+          return (
+            <div className="space-y-6">
+              {/* NPS Score */}
+              <div className="text-center">
+                <div className="text-6xl font-['Syne'] font-bold" style={{
+                  color: npsScore >= 50 ? "#22c55e" : npsScore >= 0 ? "#f59e0b" : "#ef4444"
+                }}>
+                  {npsScore.toFixed(0)}
+                </div>
+                <div className="text-sm text-[#6b6b7b]">NPS Score</div>
+              </div>
+
+              {/* Category breakdown */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-4 rounded-xl bg-red-50 text-center">
+                  <div className="text-2xl font-bold text-red-600">{detractors}</div>
+                  <div className="text-sm text-red-700">Detractors (0-6)</div>
+                  <div className="text-xs text-red-500">{total > 0 ? ((detractors / total) * 100).toFixed(0) : 0}%</div>
+                </div>
+                <div className="p-4 rounded-xl bg-yellow-50 text-center">
+                  <div className="text-2xl font-bold text-yellow-600">{passives}</div>
+                  <div className="text-sm text-yellow-700">Passives (7-8)</div>
+                  <div className="text-xs text-yellow-500">{total > 0 ? ((passives / total) * 100).toFixed(0) : 0}%</div>
+                </div>
+                <div className="p-4 rounded-xl bg-green-50 text-center">
+                  <div className="text-2xl font-bold text-green-600">{promoters}</div>
+                  <div className="text-sm text-green-700">Promoters (9-10)</div>
+                  <div className="text-xs text-green-500">{total > 0 ? ((promoters / total) * 100).toFixed(0) : 0}%</div>
+                </div>
+              </div>
+
+              {/* Score distribution */}
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={distribution}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#dcd6f6" />
+                    <XAxis dataKey="score" tick={{ fontSize: 12, fill: "#6b6b7b" }} />
+                    <YAxis tick={{ fontSize: 12, fill: "#6b6b7b" }} />
+                    <Tooltip
+                      formatter={(value) => [`${value} responses`]}
+                      contentStyle={{
+                        backgroundColor: "white",
+                        border: "1px solid #dcd6f6",
+                        borderRadius: "8px",
+                      }}
+                    />
+                    <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                      {distribution.map((entry, i) => (
+                        <Cell
+                          key={`cell-${i}`}
+                          fill={entry.score <= 6 ? "#ef4444" : entry.score <= 8 ? "#f59e0b" : "#22c55e"}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Slider - Similar to Scale */}
+        {question.type === "SLIDER" && (() => {
+          const min = question.settings?.min || 0;
+          const max = question.settings?.max || 100;
+          const step = question.settings?.step || 1;
+          const values = question.answers.map((a) => Number(a.value)).filter((v) => !isNaN(v));
+
+          const average = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+          const minVal = values.length > 0 ? Math.min(...values) : 0;
+          const maxVal = values.length > 0 ? Math.max(...values) : 0;
+
+          // Create histogram buckets
+          const bucketCount = Math.min(10, Math.ceil((max - min) / step));
+          const bucketSize = (max - min) / bucketCount;
+          const histogram = Array.from({ length: bucketCount }, (_, i) => ({
+            range: `${Math.round(min + i * bucketSize)}-${Math.round(min + (i + 1) * bucketSize)}`,
+            count: 0,
+          }));
+
+          values.forEach((v) => {
+            const bucketIndex = Math.min(Math.floor((v - min) / bucketSize), bucketCount - 1);
+            if (bucketIndex >= 0) histogram[bucketIndex].count++;
+          });
+
+          return (
+            <div className="space-y-6">
+              {/* Average display */}
+              <div className="text-center">
+                <div className="text-5xl font-['Syne'] font-bold text-[#FF4F01]">{average.toFixed(1)}</div>
+                <div className="text-sm text-[#6b6b7b]">Average (range: {minVal} - {maxVal})</div>
+              </div>
+
+              {/* Distribution */}
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={histogram}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#dcd6f6" />
+                    <XAxis dataKey="range" tick={{ fontSize: 10, fill: "#6b6b7b" }} />
+                    <YAxis tick={{ fontSize: 12, fill: "#6b6b7b" }} />
+                    <Tooltip
+                      formatter={(value) => [`${value} responses`]}
+                      contentStyle={{
+                        backgroundColor: "white",
+                        border: "1px solid #dcd6f6",
+                        borderRadius: "8px",
+                      }}
+                    />
+                    <Bar dataKey="count" fill="#FF4F01" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Ranking - Show average positions */}
+        {question.type === "RANKING" && question.options && (() => {
+          // Calculate average position for each item
+          const positionSums: Record<string, { total: number; count: number }> = {};
+          question.options.forEach((item) => {
+            positionSums[item] = { total: 0, count: 0 };
+          });
+
+          question.answers.forEach((answer) => {
+            const ranking = answer.value as string[] | null;
+            if (Array.isArray(ranking)) {
+              ranking.forEach((item, idx) => {
+                if (positionSums[item]) {
+                  positionSums[item].total += idx + 1;
+                  positionSums[item].count++;
+                }
+              });
+            }
+          });
+
+          const averagePositions = question.options
+            .map((item) => ({
+              item,
+              avgPosition: positionSums[item].count > 0
+                ? positionSums[item].total / positionSums[item].count
+                : question.options!.length,
+              responses: positionSums[item].count,
+            }))
+            .sort((a, b) => a.avgPosition - b.avgPosition);
+
+          return (
+            <div className="space-y-3">
+              <p className="text-sm text-[#6b6b7b] mb-4">Items ranked by average position (lower = more preferred)</p>
+              {averagePositions.map((stat, idx) => (
+                <div key={stat.item} className="flex items-center gap-3">
+                  <span className="w-8 h-8 rounded-full bg-gradient-to-br from-[#FF4F01] to-[#FF7A33] text-white flex items-center justify-center font-bold text-sm shrink-0">
+                    {idx + 1}
+                  </span>
+                  <span className="text-sm text-[#1a1a2e] flex-1">{stat.item}</span>
+                  <span className="text-sm text-[#6b6b7b]">
+                    Avg: {stat.avgPosition.toFixed(1)} ({stat.responses} responses)
+                  </span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
+        {/* Constant Sum - Show average distribution */}
+        {question.type === "CONSTANT_SUM" && question.options && (() => {
+          const total = question.settings?.total || 100;
+          const sums: Record<string, number[]> = {};
+          question.options.forEach((item) => {
+            sums[item] = [];
+          });
+
+          question.answers.forEach((answer) => {
+            const values = answer.value as Record<string, number> | null;
+            if (values) {
+              question.options!.forEach((item) => {
+                if (values[item] !== undefined) {
+                  sums[item].push(values[item]);
+                }
+              });
+            }
+          });
+
+          const averages = question.options.map((item) => ({
+            item,
+            average: sums[item].length > 0
+              ? sums[item].reduce((a, b) => a + b, 0) / sums[item].length
+              : 0,
+            percentage: sums[item].length > 0
+              ? (sums[item].reduce((a, b) => a + b, 0) / sums[item].length / total) * 100
+              : 0,
+          })).sort((a, b) => b.average - a.average);
+
+          return (
+            <div className="space-y-4">
+              <p className="text-sm text-[#6b6b7b]">Average point distribution out of {total}</p>
+              {averages.map((stat, i) => (
+                <div key={stat.item} className="flex items-center gap-3">
+                  <span className="text-sm text-[#1a1a2e] w-32 md:w-40 shrink-0 truncate" title={stat.item}>
+                    {stat.item}
+                  </span>
+                  <div className="flex-1 h-4 bg-[#f5f3ff] rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${stat.percentage}%`,
+                        backgroundColor: COLORS[i % COLORS.length],
+                      }}
+                    />
+                  </div>
+                  <span className="text-sm font-medium w-16 text-right">
+                    {stat.average.toFixed(1)} pts
+                  </span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* Matrix - Compact table with rating bars */}
         {question.type === "MATRIX" && question.options && (() => {

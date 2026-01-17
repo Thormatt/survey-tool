@@ -60,17 +60,33 @@ model Invitation {
 
 // Question types enum
 enum QuestionType {
+  // Text inputs
   SHORT_TEXT
   LONG_TEXT
+  EMAIL
+  PHONE
+  NUMBER
+  // Date/Time
+  DATE
+  TIME
+  // Choice questions
   SINGLE_CHOICE
   MULTIPLE_CHOICE
-  RATING
-  SCALE
-  DATE
-  EMAIL
-  NUMBER
-  SECTION_HEADER  // Display-only section break (no input)
+  DROPDOWN        // Single select dropdown (compact for many options)
+  YES_NO          // Simple yes/no toggle
+  IMAGE_CHOICE    // Select from image options
+  // Rating/Scale questions
+  RATING          // Star rating (1-5)
+  SCALE           // Linear scale
+  NPS             // Net Promoter Score (0-10)
+  LIKERT          // Opinion scale (Strongly Disagree to Strongly Agree)
+  SLIDER          // Visual slider on a range
+  // Advanced questions
   MATRIX          // Grid rating - rate multiple items on same scale
+  RANKING         // Drag to order items by preference
+  CONSTANT_SUM    // Distribute points across options (must sum to total)
+  // Display elements
+  SECTION_HEADER  // Display-only section break (no input)
 }
 
 // Question - individual questions in a survey
