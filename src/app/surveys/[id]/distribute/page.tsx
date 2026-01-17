@@ -29,6 +29,7 @@ import {
   Edit3,
   FolderPlus,
   Bell,
+  Code,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -153,6 +154,15 @@ export default function DistributePage() {
   const [timeEstimate, setTimeEstimate] = useState("");
   const [showEmailPreview, setShowEmailPreview] = useState(false);
 
+  // Embed code state
+  const [embedWidth, setEmbedWidth] = useState("100%");
+  const [embedHeight, setEmbedHeight] = useState("600");
+  const [embedBgColor, setEmbedBgColor] = useState("#fbf5ea");
+  const [embedAccentColor, setEmbedAccentColor] = useState("#FF4F01");
+  const [embedHideTitle, setEmbedHideTitle] = useState(false);
+  const [embedHideDescription, setEmbedHideDescription] = useState(false);
+  const [embedCopied, setEmbedCopied] = useState(false);
+
   const updateSurvey = async (updates: Partial<Survey>) => {
     if (!survey) return;
     setUpdating(true);
@@ -218,6 +228,37 @@ export default function DistributePage() {
   const surveyUrl = typeof window !== "undefined"
     ? `${window.location.origin}/s/${params.id}`
     : `/s/${params.id}`;
+
+  // Generate embed URL with customization params
+  const embedUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/embed/${params.id}?bg=${encodeURIComponent(embedBgColor)}&accent=${encodeURIComponent(embedAccentColor)}${embedHideTitle ? "&hideTitle=true" : ""}${embedHideDescription ? "&hideDescription=true" : ""}`
+    : `/embed/${params.id}`;
+
+  // Generate embed code
+  const embedCode = `<iframe
+  src="${embedUrl}"
+  width="${embedWidth}"
+  height="${embedHeight}"
+  frameborder="0"
+  style="border: none; border-radius: 8px;"
+  allow="clipboard-write"
+></iframe>
+
+<script>
+// Optional: Auto-resize iframe based on content
+window.addEventListener('message', function(e) {
+  if (e.data.type === 'survey:resize') {
+    const iframe = document.querySelector('iframe[src*="${params.id}"]');
+    if (iframe) iframe.style.height = e.data.height + 'px';
+  }
+});
+</script>`;
+
+  const copyEmbedCode = async () => {
+    await navigator.clipboard.writeText(embedCode);
+    setEmbedCopied(true);
+    setTimeout(() => setEmbedCopied(false), 2000);
+  };
 
   const copyLink = async () => {
     await navigator.clipboard.writeText(surveyUrl);
@@ -697,6 +738,164 @@ export default function DistributePage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Embed Code */}
+        <motion.div variants={cardVariants}>
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Code className="w-5 h-5" />
+                Embed Code
+              </CardTitle>
+              <CardDescription>
+                Embed this survey on your website or app
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Customization Options */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Width</label>
+                    <Input
+                      value={embedWidth}
+                      onChange={(e) => setEmbedWidth(e.target.value)}
+                      placeholder="100%"
+                    />
+                    <p className="text-xs text-[#6b6b7b] mt-1">e.g., 100%, 600px</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Height</label>
+                    <Input
+                      value={embedHeight}
+                      onChange={(e) => setEmbedHeight(e.target.value)}
+                      placeholder="600"
+                    />
+                    <p className="text-xs text-[#6b6b7b] mt-1">In pixels (auto-resize available)</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Background Color</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="color"
+                        value={embedBgColor}
+                        onChange={(e) => setEmbedBgColor(e.target.value)}
+                        className="w-10 h-10 rounded border border-[#dcd6f6] cursor-pointer"
+                      />
+                      <Input
+                        value={embedBgColor}
+                        onChange={(e) => setEmbedBgColor(e.target.value)}
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Accent Color</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="color"
+                        value={embedAccentColor}
+                        onChange={(e) => setEmbedAccentColor(e.target.value)}
+                        className="w-10 h-10 rounded border border-[#dcd6f6] cursor-pointer"
+                      />
+                      <Input
+                        value={embedAccentColor}
+                        onChange={(e) => setEmbedAccentColor(e.target.value)}
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={embedHideTitle}
+                      onChange={(e) => setEmbedHideTitle(e.target.checked)}
+                      className="w-4 h-4 rounded border-[#dcd6f6] text-[#FF4F01] focus:ring-[#FF4F01]"
+                    />
+                    <span className="text-sm">Hide title</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={embedHideDescription}
+                      onChange={(e) => setEmbedHideDescription(e.target.checked)}
+                      className="w-4 h-4 rounded border-[#dcd6f6] text-[#FF4F01] focus:ring-[#FF4F01]"
+                    />
+                    <span className="text-sm">Hide description</span>
+                  </label>
+                </div>
+
+                {/* Embed Code Preview */}
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Embed Code</label>
+                  <div className="relative">
+                    <pre className="bg-[#1a1a2e] text-white p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap">
+                      <code>{embedCode}</code>
+                    </pre>
+                    <motion.div
+                      className="absolute top-2 right-2"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={copyEmbedCode}
+                        className="bg-white/10 hover:bg-white/20 text-white"
+                      >
+                        <AnimatePresence mode="wait">
+                          {embedCopied ? (
+                            <motion.div
+                              key="check"
+                              initial={{ scale: 0, rotate: -180 }}
+                              animate={{ scale: 1, rotate: 0 }}
+                              exit={{ scale: 0, rotate: 180 }}
+                              transition={{ type: "spring", stiffness: 500, damping: 25 }}
+                              className="flex items-center gap-1"
+                            >
+                              <Check className="w-4 h-4 text-green-400" />
+                              <span>Copied!</span>
+                            </motion.div>
+                          ) : (
+                            <motion.div
+                              key="copy"
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              exit={{ scale: 0 }}
+                              className="flex items-center gap-1"
+                            >
+                              <Copy className="w-4 h-4" />
+                              <span>Copy</span>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </Button>
+                    </motion.div>
+                  </div>
+                </div>
+
+                {/* Preview Link */}
+                <div className="flex items-center gap-2 pt-2">
+                  <Link href={`/embed/${params.id}`} target="_blank">
+                    <Button variant="outline" size="sm">
+                      <Eye className="w-4 h-4 mr-2" />
+                      Preview Embed
+                    </Button>
+                  </Link>
+                  <p className="text-xs text-[#6b6b7b]">
+                    Opens the embeddable version in a new tab
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
 
         {/* Email Groups */}
         <Card className="mb-6">
