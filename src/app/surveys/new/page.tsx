@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -1444,18 +1445,40 @@ export default function NewSurveyPage() {
                   </button>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {questionTypes.map((qt) => (
-                    <button
+                  {questionTypes.map((qt, index) => (
+                    <motion.button
                       key={qt.type}
                       onClick={() => addQuestion(qt.type)}
-                      className="flex flex-col items-center gap-2 p-4 rounded-lg border border-[#dcd6f6] hover:border-[#c9c1ed] hover:bg-[#dcd6f6]/20 transition-all text-center"
+                      className="flex flex-col items-center gap-2 p-4 rounded-lg border border-[#dcd6f6] hover:border-[#c9c1ed] hover:bg-[#dcd6f6]/20 text-center"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        delay: index * 0.03,
+                        type: "spring",
+                        stiffness: 300,
+                        damping: 25
+                      }}
+                      whileHover={{
+                        scale: 1.05,
+                        y: -4,
+                        boxShadow: "0 8px 25px -5px rgba(0, 0, 0, 0.1)",
+                        transition: { type: "spring", stiffness: 400, damping: 20 }
+                      }}
+                      whileTap={{ scale: 0.98 }}
                     >
-                      <div className="w-10 h-10 rounded-full bg-[#dcd6f6] flex items-center justify-center">
+                      <motion.div
+                        className="w-10 h-10 rounded-full bg-[#dcd6f6] flex items-center justify-center"
+                        whileHover={{
+                          scale: 1.1,
+                          rotate: [0, -10, 10, -5, 0],
+                          transition: { duration: 0.5 }
+                        }}
+                      >
                         {qt.icon}
-                      </div>
+                      </motion.div>
                       <span className="text-sm font-medium">{qt.label}</span>
                       <span className="text-xs text-[#6b6b7b]">{qt.description}</span>
-                    </button>
+                    </motion.button>
                   ))}
                 </div>
               </CardContent>

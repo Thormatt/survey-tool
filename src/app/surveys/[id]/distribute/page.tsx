@@ -36,6 +36,7 @@ import {
   Puzzle,
   LogOut,
   Tag,
+  ChevronDown,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -183,6 +184,10 @@ export default function DistributePage() {
   const [gtmDisplayMode, setGtmDisplayMode] = useState<"popup" | "slidein" | "banner">("popup");
   const [gtmScrollPercent, setGtmScrollPercent] = useState("50");
   const [gtmTimeDelay, setGtmTimeDelay] = useState("10");
+
+  // Collapsible card state
+  const [shareExpanded, setShareExpanded] = useState(true);
+  const [embedExpanded, setEmbedExpanded] = useState(false);
 
   const updateSurvey = async (updates: Partial<Survey>) => {
     if (!survey) return;
@@ -1178,18 +1183,38 @@ window.addEventListener('message', function(e) {
         {/* Share Link */}
         <motion.div variants={cardVariants}>
           <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <LinkIcon className="w-5 h-5" />
-                Share Link
-              </CardTitle>
+            <CardHeader
+              className="cursor-pointer select-none"
+              onClick={() => setShareExpanded(!shareExpanded)}
+            >
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <LinkIcon className="w-5 h-5" />
+                  Share Link
+                </CardTitle>
+                <motion.div
+                  animate={{ rotate: shareExpanded ? 180 : 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <ChevronDown className="w-5 h-5 text-[#6b6b7b]" />
+                </motion.div>
+              </div>
               <CardDescription>
                 {survey.accessType === "INVITE_ONLY"
                   ? "Only invited emails can respond to this survey"
                   : "Anyone with this link can respond to your survey"}
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <AnimatePresence initial={false}>
+              {shareExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  style={{ overflow: "hidden" }}
+                >
+                  <CardContent>
               <div className="flex gap-2">
                 <Input value={surveyUrl} readOnly className="bg-white" />
                 <motion.div
@@ -1363,21 +1388,44 @@ window.addEventListener('message', function(e) {
               )}
             </div>
           </CardContent>
+                </motion.div>
+              )}
+            </AnimatePresence>
         </Card>
 
         {/* Embed Code */}
         <motion.div variants={cardVariants}>
           <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Code className="w-5 h-5" />
-                Embed Code
-              </CardTitle>
+            <CardHeader
+              className="cursor-pointer select-none"
+              onClick={() => setEmbedExpanded(!embedExpanded)}
+            >
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Code className="w-5 h-5" />
+                  Embed Code
+                </CardTitle>
+                <motion.div
+                  animate={{ rotate: embedExpanded ? 180 : 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <ChevronDown className="w-5 h-5 text-[#6b6b7b]" />
+                </motion.div>
+              </div>
               <CardDescription>
                 Embed this survey on your website or app
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <AnimatePresence initial={false}>
+              {embedExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  style={{ overflow: "hidden" }}
+                >
+                  <CardContent>
               <div className="space-y-4">
                 {/* Embed Type Tabs */}
                 <div className="flex flex-wrap gap-2">
@@ -1831,6 +1879,9 @@ window.addEventListener('message', function(e) {
                 </div>
               </div>
             </CardContent>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </Card>
         </motion.div>
 
