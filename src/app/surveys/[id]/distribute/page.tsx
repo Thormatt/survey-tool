@@ -30,6 +30,11 @@ import {
   FolderPlus,
   Bell,
   Code,
+  Square,
+  MousePointerClick,
+  MessageSquare,
+  Puzzle,
+  LogOut,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -155,6 +160,7 @@ export default function DistributePage() {
   const [showEmailPreview, setShowEmailPreview] = useState(false);
 
   // Embed code state
+  const [embedType, setEmbedType] = useState<"iframe" | "popup" | "slidein" | "widget" | "exit-intent">("iframe");
   const [embedWidth, setEmbedWidth] = useState("100%");
   const [embedHeight, setEmbedHeight] = useState("600");
   const [embedBgColor, setEmbedBgColor] = useState("#fbf5ea");
@@ -162,6 +168,15 @@ export default function DistributePage() {
   const [embedHideTitle, setEmbedHideTitle] = useState(false);
   const [embedHideDescription, setEmbedHideDescription] = useState(false);
   const [embedCopied, setEmbedCopied] = useState(false);
+  // Popup/Modal options
+  const [popupButtonText, setPopupButtonText] = useState("Take Survey");
+  const [popupButtonStyle, setPopupButtonStyle] = useState<"filled" | "outline">("filled");
+  // Slide-in options
+  const [slideinPosition, setSlideinPosition] = useState<"bottom-right" | "bottom-left">("bottom-right");
+  const [slideinButtonText, setSlideinButtonText] = useState("Feedback");
+  // Exit intent options
+  const [exitIntentDelay, setExitIntentDelay] = useState("5");
+  const [exitIntentShowOnce, setExitIntentShowOnce] = useState(true);
 
   const updateSurvey = async (updates: Partial<Survey>) => {
     if (!survey) return;
@@ -230,12 +245,14 @@ export default function DistributePage() {
     : `/s/${params.id}`;
 
   // Generate embed URL with customization params
-  const embedUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/embed/${params.id}?bg=${encodeURIComponent(embedBgColor)}&accent=${encodeURIComponent(embedAccentColor)}${embedHideTitle ? "&hideTitle=true" : ""}${embedHideDescription ? "&hideDescription=true" : ""}`
-    : `/embed/${params.id}`;
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const embedUrl = `${baseUrl}/embed/${params.id}?bg=${encodeURIComponent(embedBgColor)}&accent=${encodeURIComponent(embedAccentColor)}${embedHideTitle ? "&hideTitle=true" : ""}${embedHideDescription ? "&hideDescription=true" : ""}`;
 
-  // Generate embed code
-  const embedCode = `<iframe
+  // Generate embed code based on type
+  const getEmbedCode = () => {
+    switch (embedType) {
+      case "iframe":
+        return `<iframe
   src="${embedUrl}"
   width="${embedWidth}"
   height="${embedHeight}"
@@ -245,7 +262,7 @@ export default function DistributePage() {
 ></iframe>
 
 <script>
-// Optional: Auto-resize iframe based on content
+// Auto-resize iframe based on content
 window.addEventListener('message', function(e) {
   if (e.data.type === 'survey:resize') {
     const iframe = document.querySelector('iframe[src*="${params.id}"]');
@@ -253,6 +270,390 @@ window.addEventListener('message', function(e) {
   }
 });
 </script>`;
+
+      case "popup":
+        return `<!-- Survey Popup Button -->
+<button
+  onclick="openSurveyPopup()"
+  style="
+    background: ${popupButtonStyle === 'filled' ? embedAccentColor : 'transparent'};
+    color: ${popupButtonStyle === 'filled' ? '#fff' : embedAccentColor};
+    border: 2px solid ${embedAccentColor};
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 16px;
+  "
+>${popupButtonText}</button>
+
+<script>
+function openSurveyPopup() {
+  // Create overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'survey-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.onclick = function(e) { if(e.target === overlay) closeSurveyPopup(); };
+
+  // Create modal container
+  const modal = document.createElement('div');
+  modal.style.cssText = 'background:#fff;border-radius:16px;max-width:600px;width:100%;max-height:90vh;overflow:hidden;position:relative;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);';
+
+  // Close button
+  const closeBtn = document.createElement('button');
+  closeBtn.innerHTML = '&times;';
+  closeBtn.style.cssText = 'position:absolute;top:12px;right:12px;background:none;border:none;font-size:28px;cursor:pointer;color:#666;z-index:10;width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:50%;';
+  closeBtn.onmouseover = function() { this.style.background = '#f0f0f0'; };
+  closeBtn.onmouseout = function() { this.style.background = 'none'; };
+  closeBtn.onclick = closeSurveyPopup;
+
+  // Iframe
+  const iframe = document.createElement('iframe');
+  iframe.src = '${embedUrl}';
+  iframe.style.cssText = 'width:100%;height:600px;border:none;';
+  iframe.allow = 'clipboard-write';
+
+  modal.appendChild(closeBtn);
+  modal.appendChild(iframe);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  document.body.style.overflow = 'hidden';
+
+  // Listen for completion
+  window.addEventListener('message', function handler(e) {
+    if (e.data.type === 'survey:completed') {
+      setTimeout(closeSurveyPopup, 2000);
+      window.removeEventListener('message', handler);
+    }
+    if (e.data.type === 'survey:resize') {
+      iframe.style.height = Math.min(e.data.height, window.innerHeight * 0.85) + 'px';
+    }
+  });
+}
+
+function closeSurveyPopup() {
+  const overlay = document.getElementById('survey-overlay');
+  if (overlay) {
+    overlay.remove();
+    document.body.style.overflow = '';
+  }
+}
+</script>`;
+
+      case "slidein":
+        return `<!-- Floating Feedback Button with Slide-in Survey -->
+<style>
+#survey-floating-btn {
+  position: fixed;
+  ${slideinPosition === 'bottom-right' ? 'right: 20px;' : 'left: 20px;'}
+  bottom: 20px;
+  background: ${embedAccentColor};
+  color: #fff;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 50px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 14px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+  z-index: 9998;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+#survey-floating-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+}
+#survey-slidein {
+  position: fixed;
+  ${slideinPosition === 'bottom-right' ? 'right: 20px;' : 'left: 20px;'}
+  bottom: 80px;
+  width: 380px;
+  max-width: calc(100vw - 40px);
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+  z-index: 9999;
+  overflow: hidden;
+  transform: translateY(20px);
+  opacity: 0;
+  visibility: hidden;
+  transition: transform 0.3s ease, opacity 0.3s ease, visibility 0.3s;
+}
+#survey-slidein.open {
+  transform: translateY(0);
+  opacity: 1;
+  visibility: visible;
+}
+#survey-slidein-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #eee;
+}
+#survey-slidein-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+#survey-slidein-close:hover { background: #f0f0f0; }
+</style>
+
+<button id="survey-floating-btn" onclick="toggleSurveySlideIn()">
+  💬 ${slideinButtonText}
+</button>
+
+<div id="survey-slidein">
+  <div id="survey-slidein-header">
+    <span style="font-weight:600;font-size:14px;">Share your feedback</span>
+    <button id="survey-slidein-close" onclick="toggleSurveySlideIn()">&times;</button>
+  </div>
+  <iframe
+    src="${embedUrl}"
+    style="width:100%;height:500px;border:none;"
+    allow="clipboard-write"
+  ></iframe>
+</div>
+
+<script>
+let surveySlideInOpen = false;
+function toggleSurveySlideIn() {
+  surveySlideInOpen = !surveySlideInOpen;
+  document.getElementById('survey-slidein').classList.toggle('open', surveySlideInOpen);
+}
+// Close on completion
+window.addEventListener('message', function(e) {
+  if (e.data.type === 'survey:completed') {
+    setTimeout(function() {
+      surveySlideInOpen = false;
+      document.getElementById('survey-slidein').classList.remove('open');
+    }, 2000);
+  }
+});
+</script>`;
+
+      case "widget":
+        return `<!-- Survey Widget - Renders inline -->
+<div id="survey-widget-${params.id}"></div>
+
+<script>
+(function() {
+  const container = document.getElementById('survey-widget-${params.id}');
+  if (!container) return;
+
+  // Create iframe
+  const iframe = document.createElement('iframe');
+  iframe.src = '${embedUrl}';
+  iframe.style.cssText = 'width:100%;border:none;border-radius:8px;min-height:400px;';
+  iframe.allow = 'clipboard-write';
+  container.appendChild(iframe);
+
+  // Auto-resize
+  window.addEventListener('message', function(e) {
+    if (e.data.type === 'survey:resize') {
+      iframe.style.height = e.data.height + 'px';
+    }
+  });
+})();
+</script>
+
+<!-- Alternative: Script tag version -->
+<!--
+<script
+  src="${baseUrl}/widget.js"
+  data-survey-id="${params.id}"
+  data-bg="${encodeURIComponent(embedBgColor)}"
+  data-accent="${encodeURIComponent(embedAccentColor)}"
+  ${embedHideTitle ? 'data-hide-title="true"' : ''}
+  ${embedHideDescription ? 'data-hide-description="true"' : ''}
+></script>
+-->`;
+
+      case "exit-intent":
+        return `<!-- Exit Intent Survey Popup (Like Hotjar) -->
+<script>
+(function() {
+  const SURVEY_ID = '${params.id}';
+  const STORAGE_KEY = 'survey_shown_' + SURVEY_ID;
+  const SHOW_ONCE = ${exitIntentShowOnce};
+  const MIN_TIME_ON_PAGE = ${exitIntentDelay} * 1000; // seconds to ms
+
+  let hasShown = false;
+  let pageLoadTime = Date.now();
+
+  // Check if already shown (if show once is enabled)
+  if (SHOW_ONCE && localStorage.getItem(STORAGE_KEY)) {
+    return;
+  }
+
+  function showSurveyPopup() {
+    if (hasShown) return;
+    if (Date.now() - pageLoadTime < MIN_TIME_ON_PAGE) return;
+
+    hasShown = true;
+    if (SHOW_ONCE) {
+      localStorage.setItem(STORAGE_KEY, 'true');
+    }
+
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'survey-exit-overlay';
+    overlay.style.cssText = \`
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 99999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      animation: fadeIn 0.3s ease;
+    \`;
+
+    // Create modal
+    const modal = document.createElement('div');
+    modal.style.cssText = \`
+      background: #fff;
+      border-radius: 16px;
+      max-width: 500px;
+      width: 100%;
+      max-height: 90vh;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.4);
+      animation: slideUp 0.3s ease;
+    \`;
+
+    // Header with message
+    const header = document.createElement('div');
+    header.style.cssText = \`
+      background: linear-gradient(135deg, ${embedAccentColor}, ${embedAccentColor}dd);
+      color: #fff;
+      padding: 20px 24px;
+      text-align: center;
+    \`;
+    header.innerHTML = \`
+      <h3 style="margin:0 0 8px;font-size:20px;font-weight:700;">Wait! Before you go...</h3>
+      <p style="margin:0;opacity:0.9;font-size:14px;">We'd love your quick feedback</p>
+    \`;
+
+    // Close button
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '&times;';
+    closeBtn.style.cssText = \`
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: rgba(255,255,255,0.2);
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #fff;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: background 0.2s;
+    \`;
+    closeBtn.onmouseover = function() { this.style.background = 'rgba(255,255,255,0.3)'; };
+    closeBtn.onmouseout = function() { this.style.background = 'rgba(255,255,255,0.2)'; };
+    closeBtn.onclick = closeSurvey;
+
+    // Iframe container
+    const iframeContainer = document.createElement('div');
+    iframeContainer.style.cssText = 'padding: 0;';
+
+    const iframe = document.createElement('iframe');
+    iframe.src = '${embedUrl}';
+    iframe.style.cssText = 'width:100%;height:450px;border:none;';
+    iframe.allow = 'clipboard-write';
+
+    iframeContainer.appendChild(iframe);
+    modal.appendChild(header);
+    modal.appendChild(closeBtn);
+    modal.appendChild(iframeContainer);
+    overlay.appendChild(modal);
+
+    // Add animation styles
+    const style = document.createElement('style');
+    style.textContent = \`
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes slideUp {
+        from { opacity: 0; transform: translateY(30px) scale(0.95); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+    \`;
+    document.head.appendChild(style);
+
+    document.body.appendChild(overlay);
+    document.body.style.overflow = 'hidden';
+
+    // Close on overlay click
+    overlay.onclick = function(e) {
+      if (e.target === overlay) closeSurvey();
+    };
+
+    // Listen for completion
+    window.addEventListener('message', function handler(e) {
+      if (e.data.type === 'survey:completed') {
+        setTimeout(closeSurvey, 2000);
+      }
+      if (e.data.type === 'survey:resize') {
+        iframe.style.height = Math.min(e.data.height, window.innerHeight * 0.7) + 'px';
+      }
+    });
+  }
+
+  function closeSurvey() {
+    const overlay = document.getElementById('survey-exit-overlay');
+    if (overlay) {
+      overlay.style.animation = 'fadeIn 0.2s ease reverse';
+      setTimeout(function() {
+        overlay.remove();
+        document.body.style.overflow = '';
+      }, 200);
+    }
+  }
+
+  // Exit intent detection (mouse leaves viewport at top)
+  document.addEventListener('mouseout', function(e) {
+    if (e.clientY < 10 && e.relatedTarget === null) {
+      showSurveyPopup();
+    }
+  });
+
+  // Mobile: detect back button / page visibility change
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'hidden') {
+      // User is leaving - we can't show popup here but can track
+    }
+  });
+
+  // Also show after extended time on page (optional engagement trigger)
+  setTimeout(function() {
+    if (!hasShown && Date.now() - pageLoadTime > 60000) { // 60 seconds
+      // Uncomment below to also show after 60s on page
+      // showSurveyPopup();
+    }
+  }, 60000);
+})();
+</script>`;
+
+      default:
+        return "";
+    }
+  };
+
+  const embedCode = getEmbedCode();
 
   const copyEmbedCode = async () => {
     await navigator.clipboard.writeText(embedCode);
@@ -753,29 +1154,35 @@ window.addEventListener('message', function(e) {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {/* Customization Options */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Width</label>
-                    <Input
-                      value={embedWidth}
-                      onChange={(e) => setEmbedWidth(e.target.value)}
-                      placeholder="100%"
-                    />
-                    <p className="text-xs text-[#6b6b7b] mt-1">e.g., 100%, 600px</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Height</label>
-                    <Input
-                      value={embedHeight}
-                      onChange={(e) => setEmbedHeight(e.target.value)}
-                      placeholder="600"
-                    />
-                    <p className="text-xs text-[#6b6b7b] mt-1">In pixels (auto-resize available)</p>
-                  </div>
+                {/* Embed Type Tabs */}
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { id: "iframe", label: "Inline", icon: Square, desc: "Embed directly on page" },
+                    { id: "popup", label: "Popup", icon: MousePointerClick, desc: "Button opens modal" },
+                    { id: "slidein", label: "Slide-in", icon: MessageSquare, desc: "Floating feedback button" },
+                    { id: "widget", label: "Widget", icon: Puzzle, desc: "JavaScript widget" },
+                    { id: "exit-intent", label: "Exit Intent", icon: LogOut, desc: "Show when leaving" },
+                  ].map(({ id, label, icon: Icon, desc }) => (
+                    <button
+                      key={id}
+                      onClick={() => setEmbedType(id as typeof embedType)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all text-left ${
+                        embedType === id
+                          ? "bg-[#FF4F01] text-white border-[#FF4F01]"
+                          : "bg-white text-[#6b6b7b] border-[#dcd6f6] hover:border-[#FF4F01]"
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      <div>
+                        <p className="text-sm font-medium">{label}</p>
+                        <p className={`text-xs ${embedType === id ? "text-white/80" : "text-[#9b9bab]"}`}>{desc}</p>
+                      </div>
+                    </button>
+                  ))}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                {/* Common Options: Colors */}
+                <div className="grid grid-cols-2 gap-4 pt-2">
                   <div>
                     <label className="text-sm font-medium mb-2 block">Background Color</label>
                     <div className="flex gap-2">
@@ -810,32 +1217,235 @@ window.addEventListener('message', function(e) {
                   </div>
                 </div>
 
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={embedHideTitle}
-                      onChange={(e) => setEmbedHideTitle(e.target.checked)}
-                      className="w-4 h-4 rounded border-[#dcd6f6] text-[#FF4F01] focus:ring-[#FF4F01]"
-                    />
-                    <span className="text-sm">Hide title</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={embedHideDescription}
-                      onChange={(e) => setEmbedHideDescription(e.target.checked)}
-                      className="w-4 h-4 rounded border-[#dcd6f6] text-[#FF4F01] focus:ring-[#FF4F01]"
-                    />
-                    <span className="text-sm">Hide description</span>
-                  </label>
-                </div>
+                {/* Type-Specific Options */}
+                {embedType === "iframe" && (
+                  <div className="space-y-4 p-4 bg-[#fbf5ea] rounded-lg">
+                    <p className="text-sm font-medium text-[#1a1a2e]">Inline Embed Options</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm text-[#6b6b7b] mb-1 block">Width</label>
+                        <Input
+                          value={embedWidth}
+                          onChange={(e) => setEmbedWidth(e.target.value)}
+                          placeholder="100%"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm text-[#6b6b7b] mb-1 block">Height (px)</label>
+                        <Input
+                          value={embedHeight}
+                          onChange={(e) => setEmbedHeight(e.target.value)}
+                          placeholder="600"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={embedHideTitle}
+                          onChange={(e) => setEmbedHideTitle(e.target.checked)}
+                          className="w-4 h-4 rounded"
+                        />
+                        <span className="text-sm">Hide title</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={embedHideDescription}
+                          onChange={(e) => setEmbedHideDescription(e.target.checked)}
+                          className="w-4 h-4 rounded"
+                        />
+                        <span className="text-sm">Hide description</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {embedType === "popup" && (
+                  <div className="space-y-4 p-4 bg-[#fbf5ea] rounded-lg">
+                    <p className="text-sm font-medium text-[#1a1a2e]">Popup Button Options</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm text-[#6b6b7b] mb-1 block">Button Text</label>
+                        <Input
+                          value={popupButtonText}
+                          onChange={(e) => setPopupButtonText(e.target.value)}
+                          placeholder="Take Survey"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm text-[#6b6b7b] mb-1 block">Button Style</label>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setPopupButtonStyle("filled")}
+                            className={`flex-1 py-2 px-3 rounded border text-sm transition-all ${
+                              popupButtonStyle === "filled"
+                                ? "bg-[#1a1a2e] text-white border-[#1a1a2e]"
+                                : "bg-white border-[#dcd6f6]"
+                            }`}
+                          >
+                            Filled
+                          </button>
+                          <button
+                            onClick={() => setPopupButtonStyle("outline")}
+                            className={`flex-1 py-2 px-3 rounded border text-sm transition-all ${
+                              popupButtonStyle === "outline"
+                                ? "bg-[#1a1a2e] text-white border-[#1a1a2e]"
+                                : "bg-white border-[#dcd6f6]"
+                            }`}
+                          >
+                            Outline
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Preview */}
+                    <div className="pt-2">
+                      <p className="text-xs text-[#6b6b7b] mb-2">Preview:</p>
+                      <button
+                        style={{
+                          background: popupButtonStyle === "filled" ? embedAccentColor : "transparent",
+                          color: popupButtonStyle === "filled" ? "#fff" : embedAccentColor,
+                          border: `2px solid ${embedAccentColor}`,
+                          padding: "10px 20px",
+                          borderRadius: "8px",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {popupButtonText}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {embedType === "slidein" && (
+                  <div className="space-y-4 p-4 bg-[#fbf5ea] rounded-lg">
+                    <p className="text-sm font-medium text-[#1a1a2e]">Floating Button Options</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm text-[#6b6b7b] mb-1 block">Button Text</label>
+                        <Input
+                          value={slideinButtonText}
+                          onChange={(e) => setSlideinButtonText(e.target.value)}
+                          placeholder="Feedback"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm text-[#6b6b7b] mb-1 block">Position</label>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setSlideinPosition("bottom-right")}
+                            className={`flex-1 py-2 px-3 rounded border text-sm transition-all ${
+                              slideinPosition === "bottom-right"
+                                ? "bg-[#1a1a2e] text-white border-[#1a1a2e]"
+                                : "bg-white border-[#dcd6f6]"
+                            }`}
+                          >
+                            ↘ Right
+                          </button>
+                          <button
+                            onClick={() => setSlideinPosition("bottom-left")}
+                            className={`flex-1 py-2 px-3 rounded border text-sm transition-all ${
+                              slideinPosition === "bottom-left"
+                                ? "bg-[#1a1a2e] text-white border-[#1a1a2e]"
+                                : "bg-white border-[#dcd6f6]"
+                            }`}
+                          >
+                            ↙ Left
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Preview */}
+                    <div className="pt-2">
+                      <p className="text-xs text-[#6b6b7b] mb-2">Preview:</p>
+                      <button
+                        style={{
+                          background: embedAccentColor,
+                          color: "#fff",
+                          padding: "10px 18px",
+                          borderRadius: "50px",
+                          fontWeight: 600,
+                          fontSize: "14px",
+                          border: "none",
+                          boxShadow: "0 4px 14px rgba(0,0,0,0.15)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        💬 {slideinButtonText}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {embedType === "widget" && (
+                  <div className="space-y-4 p-4 bg-[#fbf5ea] rounded-lg">
+                    <p className="text-sm font-medium text-[#1a1a2e]">Widget Options</p>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={embedHideTitle}
+                          onChange={(e) => setEmbedHideTitle(e.target.checked)}
+                          className="w-4 h-4 rounded"
+                        />
+                        <span className="text-sm">Hide title</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={embedHideDescription}
+                          onChange={(e) => setEmbedHideDescription(e.target.checked)}
+                          className="w-4 h-4 rounded"
+                        />
+                        <span className="text-sm">Hide description</span>
+                      </label>
+                    </div>
+                    <p className="text-xs text-[#6b6b7b]">
+                      The widget auto-resizes based on survey content and adapts to container width.
+                    </p>
+                  </div>
+                )}
+
+                {embedType === "exit-intent" && (
+                  <div className="space-y-4 p-4 bg-[#fbf5ea] rounded-lg">
+                    <p className="text-sm font-medium text-[#1a1a2e]">Exit Intent Options</p>
+                    <p className="text-xs text-[#6b6b7b]">
+                      Shows the survey when visitors move their mouse to leave the page (like Hotjar).
+                    </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm text-[#6b6b7b] mb-1 block">Min. time on page (seconds)</label>
+                        <Input
+                          value={exitIntentDelay}
+                          onChange={(e) => setExitIntentDelay(e.target.value)}
+                          placeholder="5"
+                          type="number"
+                          min="0"
+                        />
+                      </div>
+                      <div className="flex items-end pb-1">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={exitIntentShowOnce}
+                            onChange={(e) => setExitIntentShowOnce(e.target.checked)}
+                            className="w-4 h-4 rounded"
+                          />
+                          <span className="text-sm">Show only once per visitor</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Embed Code Preview */}
                 <div>
-                  <label className="text-sm font-medium mb-2 block">Embed Code</label>
+                  <label className="text-sm font-medium mb-2 block">Generated Code</label>
                   <div className="relative">
-                    <pre className="bg-[#1a1a2e] text-white p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap">
+                    <pre className="bg-[#1a1a2e] text-white p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap max-h-80">
                       <code>{embedCode}</code>
                     </pre>
                     <motion.div
