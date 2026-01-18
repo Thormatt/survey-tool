@@ -1,13 +1,14 @@
-import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
+import { apiError, apiSuccess } from "@/lib/api-response";
 
 export async function GET() {
   try {
     const { userId } = await auth();
 
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("Unauthorized", 401);
     }
 
     // Get all surveys for the user
@@ -50,7 +51,7 @@ export async function GET() {
       createdAt: survey.createdAt.toISOString(),
     }));
 
-    return NextResponse.json({
+    return apiSuccess({
       totalSurveys,
       publishedSurveys,
       totalResponses,
@@ -58,10 +59,7 @@ export async function GET() {
       recentSurveys,
     });
   } catch (error) {
-    console.error("Error fetching analytics:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch analytics" },
-      { status: 500 }
-    );
+    logger.error("Error fetching analytics", error);
+    return apiError("Failed to fetch analytics", 500);
   }
 }

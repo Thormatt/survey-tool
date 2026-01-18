@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
 
 // Public Server-Sent Events endpoint for real-time survey results
 // No authentication required - for public results viewing
@@ -45,7 +46,7 @@ export async function GET(
           });
 
           if (currentCount !== lastResponseCount) {
-            // Fetch updated survey data
+            // Fetch updated survey data (only when count changes)
             const updatedSurvey = await db.survey.findUnique({
               where: { id, published: true },
               include: {
@@ -88,7 +89,7 @@ export async function GET(
             encoder.encode(`data: ${JSON.stringify({ type: "heartbeat" })}\n\n`)
           );
         } catch (error) {
-          console.error("SSE poll error:", error);
+          logger.error("SSE poll error", error);
         }
       }, 3000);
     },

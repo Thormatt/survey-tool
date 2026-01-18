@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
+import { logger } from "@/lib/logger";
+import { apiError, apiSuccess } from "@/lib/api-response";
 
 export async function GET(
   request: NextRequest,
@@ -10,7 +12,7 @@ export async function GET(
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("Unauthorized", 401);
     }
 
     const { id } = await params;
@@ -28,24 +30,18 @@ export async function GET(
     });
 
     if (!survey) {
-      return NextResponse.json(
-        { error: "Survey not found" },
-        { status: 404 }
-      );
+      return apiError("Survey not found", 404);
     }
 
     // Check ownership
     if (survey.userId !== userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("Unauthorized", 403);
     }
 
-    return NextResponse.json(survey);
+    return apiSuccess(survey);
   } catch (error) {
-    console.error("Error fetching survey:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch survey" },
-      { status: 500 }
-    );
+    logger.error("Error fetching survey", error);
+    return apiError("Failed to fetch survey", 500);
   }
 }
 
@@ -56,7 +52,7 @@ export async function PATCH(
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("Unauthorized", 401);
     }
 
     const { id } = await params;
@@ -68,12 +64,12 @@ export async function PATCH(
     });
 
     if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+      return apiError("Survey not found", 404);
     }
 
     // Check ownership
     if (survey.userId !== userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("Unauthorized", 403);
     }
 
     // Only allow updating specific fields
@@ -91,13 +87,10 @@ export async function PATCH(
       data: updateData,
     });
 
-    return NextResponse.json(updatedSurvey);
+    return apiSuccess(updatedSurvey);
   } catch (error) {
-    console.error("Error updating survey:", error);
-    return NextResponse.json(
-      { error: "Failed to update survey" },
-      { status: 500 }
-    );
+    logger.error("Error updating survey", error);
+    return apiError("Failed to update survey", 500);
   }
 }
 
@@ -108,7 +101,7 @@ export async function PUT(
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("Unauthorized", 401);
     }
 
     const { id } = await params;
@@ -121,20 +114,17 @@ export async function PUT(
     });
 
     if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+      return apiError("Survey not found", 404);
     }
 
     // Check ownership
     if (survey.userId !== userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("Unauthorized", 403);
     }
 
     // Don't allow editing published surveys
     if (survey.published) {
-      return NextResponse.json(
-        { error: "Cannot edit published survey" },
-        { status: 400 }
-      );
+      return apiError("Cannot edit published survey", 400);
     }
 
     // Update survey metadata
@@ -204,13 +194,10 @@ export async function PUT(
       },
     });
 
-    return NextResponse.json(updatedSurvey);
+    return apiSuccess(updatedSurvey);
   } catch (error) {
-    console.error("Error updating survey:", error);
-    return NextResponse.json(
-      { error: "Failed to update survey" },
-      { status: 500 }
-    );
+    logger.error("Error updating survey", error);
+    return apiError("Failed to update survey", 500);
   }
 }
 
@@ -221,7 +208,7 @@ export async function DELETE(
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("Unauthorized", 401);
     }
 
     const { id } = await params;
@@ -232,15 +219,12 @@ export async function DELETE(
     });
 
     if (!survey) {
-      return NextResponse.json(
-        { error: "Survey not found" },
-        { status: 404 }
-      );
+      return apiError("Survey not found", 404);
     }
 
     // Check ownership
     if (survey.userId !== userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("Unauthorized", 403);
     }
 
     // Delete related records first (no cascade in HTTP mode)
@@ -262,12 +246,9 @@ export async function DELETE(
       where: { id },
     });
 
-    return NextResponse.json({ success: true });
+    return apiSuccess({ success: true });
   } catch (error) {
-    console.error("Error deleting survey:", error);
-    return NextResponse.json(
-      { error: "Failed to delete survey" },
-      { status: 500 }
-    );
+    logger.error("Error deleting survey", error);
+    return apiError("Failed to delete survey", 500);
   }
 }

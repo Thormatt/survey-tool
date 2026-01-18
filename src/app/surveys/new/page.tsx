@@ -46,6 +46,13 @@ import {
   PieChart,
   Phone,
   Clock,
+  Upload,
+  FileJson,
+  Copy,
+  MapPin,
+  PenLine,
+  Globe,
+  EyeOff as HiddenIcon,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -87,7 +94,12 @@ type QuestionType =
   | "RANKING"
   | "CONSTANT_SUM"
   | "PHONE"
-  | "TIME";
+  | "TIME"
+  | "URL"
+  | "FILE_UPLOAD"
+  | "SIGNATURE"
+  | "ADDRESS"
+  | "HIDDEN";
 
 type AccessType = "UNLISTED" | "INVITE_ONLY";
 
@@ -134,6 +146,13 @@ interface Question {
     total?: number;
     // Image Choice settings
     imageUrls?: Record<string, string>;
+    // File Upload settings
+    allowedTypes?: string[];
+    maxSizeMB?: number;
+    // Address settings
+    includeCountry?: boolean;
+    // Hidden field settings
+    defaultValue?: string;
   };
 }
 
@@ -162,8 +181,10 @@ const questionTypes: {
   { type: "EMAIL", label: "Email", icon: <Mail className="w-4 h-4" />, description: "Email address", category: "text" },
   { type: "PHONE", label: "Phone", icon: <Phone className="w-4 h-4" />, description: "Phone number", category: "text" },
   { type: "NUMBER", label: "Number", icon: <Hash className="w-4 h-4" />, description: "Numeric input", category: "text" },
+  { type: "URL", label: "Website URL", icon: <Globe className="w-4 h-4" />, description: "URL with validation", category: "text" },
   { type: "DATE", label: "Date", icon: <Calendar className="w-4 h-4" />, description: "Date picker", category: "text" },
   { type: "TIME", label: "Time", icon: <Clock className="w-4 h-4" />, description: "Time picker", category: "text" },
+  { type: "ADDRESS", label: "Address", icon: <MapPin className="w-4 h-4" />, description: "Location/address", category: "text" },
   // Choice questions
   { type: "SINGLE_CHOICE", label: "Single Choice", icon: <CircleDot className="w-4 h-4" />, description: "Pick one option", category: "choice" },
   { type: "MULTIPLE_CHOICE", label: "Multiple Choice", icon: <CheckSquare className="w-4 h-4" />, description: "Pick multiple", category: "choice" },
@@ -180,6 +201,9 @@ const questionTypes: {
   { type: "MATRIX", label: "Matrix / Grid", icon: <Grid3X3 className="w-4 h-4" />, description: "Rate multiple items", category: "advanced" },
   { type: "RANKING", label: "Ranking", icon: <ListOrdered className="w-4 h-4" />, description: "Order by preference", category: "advanced" },
   { type: "CONSTANT_SUM", label: "Constant Sum", icon: <PieChart className="w-4 h-4" />, description: "Distribute points", category: "advanced" },
+  { type: "FILE_UPLOAD", label: "File Upload", icon: <Upload className="w-4 h-4" />, description: "Upload files", category: "advanced" },
+  { type: "SIGNATURE", label: "Signature", icon: <PenLine className="w-4 h-4" />, description: "Digital signature", category: "advanced" },
+  { type: "HIDDEN", label: "Hidden Field", icon: <HiddenIcon className="w-4 h-4" />, description: "Tracking field", category: "advanced" },
 ];
 
 // Question Type Preview Component - shows realistic preview of how each question type looks
@@ -430,6 +454,62 @@ function QuestionTypePreview({ type }: { type: QuestionType }) {
               <span className="text-[10px] font-medium w-6">{item.val}</span>
             </div>
           ))}
+        </div>
+      );
+    case "URL":
+      return (
+        <div>
+          <p className={labelStyles}>Website URL</p>
+          <div className="border border-[#dcd6f6] rounded px-2 py-1.5 bg-white flex items-center gap-1">
+            <Globe className="w-3 h-3 text-[#9b9bab]" />
+            <span className={`${previewStyles} text-[#9b9bab]`}>https://example.com</span>
+          </div>
+        </div>
+      );
+    case "ADDRESS":
+      return (
+        <div className="space-y-1">
+          <p className={labelStyles}>Address</p>
+          <div className="border border-[#dcd6f6] rounded px-2 py-1 bg-white">
+            <span className={`${previewStyles} text-[#9b9bab]`}>123 Main St</span>
+          </div>
+          <div className="flex gap-1">
+            <div className="flex-1 border border-[#dcd6f6] rounded px-2 py-1 bg-white">
+              <span className="text-[9px] text-[#9b9bab]">City</span>
+            </div>
+            <div className="w-12 border border-[#dcd6f6] rounded px-2 py-1 bg-white">
+              <span className="text-[9px] text-[#9b9bab]">ZIP</span>
+            </div>
+          </div>
+        </div>
+      );
+    case "FILE_UPLOAD":
+      return (
+        <div>
+          <p className={labelStyles}>Upload a file</p>
+          <div className="border-2 border-dashed border-[#dcd6f6] rounded-lg p-3 bg-[#faf9ff] flex flex-col items-center gap-1">
+            <Upload className="w-4 h-4 text-[#9b9bab]" />
+            <span className="text-[10px] text-[#6b6b7b]">Drop files here</span>
+          </div>
+        </div>
+      );
+    case "SIGNATURE":
+      return (
+        <div>
+          <p className={labelStyles}>Sign below</p>
+          <div className="border border-[#dcd6f6] rounded-lg h-12 bg-white flex items-end justify-center pb-1">
+            <svg className="w-16 h-6" viewBox="0 0 64 24">
+              <path d="M4 18 Q16 4 28 16 T52 12 T60 16" fill="none" stroke="#1a1a2e" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </div>
+        </div>
+      );
+    case "HIDDEN":
+      return (
+        <div className="bg-[#f0f0f4] border border-dashed border-[#9b9bab] rounded p-2 text-center">
+          <HiddenIcon className="w-4 h-4 text-[#6b6b7b] mx-auto mb-1" />
+          <p className="text-[10px] text-[#6b6b7b]">Hidden from respondents</p>
+          <p className="text-[9px] text-[#9b9bab]">Used for tracking</p>
         </div>
       );
     default:
@@ -1328,6 +1408,7 @@ function SortableQuestion({
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
+                      aria-label={`Make "${question.title}" a required question`}
                       checked={question.required}
                       onChange={(e) => updateQuestion(question.id, { required: e.target.checked })}
                       className="rounded border-[#dcd6f6]"
@@ -1377,6 +1458,17 @@ export default function NewSurveyPage() {
   const [isAnonymous, setIsAnonymous] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
 
+  // AI Generation state
+  const [showAIGenerator, setShowAIGenerator] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  // Import state
+  const [showImporter, setShowImporter] = useState(false);
+  const [importJson, setImportJson] = useState("");
+  const [importError, setImportError] = useState<string | null>(null);
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -1411,6 +1503,143 @@ export default function NewSurveyPage() {
         id: crypto.randomUUID(),
       }))
     );
+  };
+
+  const generateWithAI = async () => {
+    if (!aiPrompt.trim()) {
+      setAiError("Please describe what your survey should be about");
+      return;
+    }
+
+    setAiGenerating(true);
+    setAiError(null);
+
+    try {
+      const response = await fetch("/api/ai/generate-survey", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: aiPrompt }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to generate survey");
+      }
+
+      // Set the generated survey data
+      setSelectedTemplate({
+        id: "ai-generated",
+        name: "AI Generated",
+        description: "Generated with AI",
+        icon: <Sparkles className="w-6 h-6" />,
+        title: data.title,
+        surveyDescription: data.description,
+        questions: data.questions,
+      });
+      setTitle(data.title);
+      setDescription(data.description);
+      setQuestions(
+        data.questions.map((q: Question) => ({
+          ...q,
+          id: crypto.randomUUID(),
+        }))
+      );
+      setShowAIGenerator(false);
+      setAiPrompt("");
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "Failed to generate survey");
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  // Valid question types for import validation
+  const VALID_IMPORT_TYPES = [
+    "SECTION_HEADER", "SHORT_TEXT", "LONG_TEXT", "EMAIL", "PHONE", "NUMBER",
+    "DATE", "TIME", "SINGLE_CHOICE", "MULTIPLE_CHOICE", "DROPDOWN", "YES_NO",
+    "IMAGE_CHOICE", "RATING", "SCALE", "NPS", "LIKERT", "SLIDER", "MATRIX",
+    "RANKING", "CONSTANT_SUM", "URL", "FILE_UPLOAD", "SIGNATURE", "ADDRESS", "HIDDEN"
+  ];
+
+  const importSurvey = () => {
+    setImportError(null);
+
+    if (!importJson.trim()) {
+      setImportError("Please paste your survey JSON");
+      return;
+    }
+
+    try {
+      // Try to parse the JSON
+      let survey;
+      try {
+        survey = JSON.parse(importJson);
+      } catch {
+        setImportError("Invalid JSON format. Please check your syntax.");
+        return;
+      }
+
+      // Validate structure
+      if (!survey.title || typeof survey.title !== "string") {
+        setImportError("Survey must have a 'title' field (string)");
+        return;
+      }
+
+      if (!Array.isArray(survey.questions)) {
+        setImportError("Survey must have a 'questions' array");
+        return;
+      }
+
+      // Validate and clean questions
+      const validatedQuestions: Question[] = [];
+      for (let i = 0; i < survey.questions.length; i++) {
+        const q = survey.questions[i];
+
+        if (!q.type || !VALID_IMPORT_TYPES.includes(q.type)) {
+          setImportError(`Question ${i + 1}: Invalid or missing 'type'. Valid types: ${VALID_IMPORT_TYPES.join(", ")}`);
+          return;
+        }
+
+        if (!q.title || typeof q.title !== "string") {
+          setImportError(`Question ${i + 1}: Missing or invalid 'title'`);
+          return;
+        }
+
+        validatedQuestions.push({
+          id: crypto.randomUUID(),
+          type: q.type as QuestionType,
+          title: q.title,
+          description: q.description || "",
+          required: q.required ?? true,
+          options: Array.isArray(q.options) ? q.options : undefined,
+          settings: typeof q.settings === "object" ? q.settings : undefined,
+        });
+      }
+
+      if (validatedQuestions.length === 0) {
+        setImportError("Survey must have at least one valid question");
+        return;
+      }
+
+      // Success! Set the survey data
+      setSelectedTemplate({
+        id: "imported",
+        name: "Imported Survey",
+        description: "Imported from JSON",
+        icon: <Sparkles className="w-6 h-6" />,
+        title: survey.title,
+        surveyDescription: survey.description || "",
+        questions: validatedQuestions,
+      });
+      setTitle(survey.title);
+      setDescription(survey.description || "");
+      setQuestions(validatedQuestions);
+      setShowImporter(false);
+      setImportJson("");
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Failed to import survey");
+    }
   };
 
   const saveSurvey = async (publish: boolean) => {
@@ -1501,13 +1730,22 @@ export default function NewSurveyPage() {
       case "SCALE":
         settings = { scaleMin: 1, scaleMax: 10 };
         break;
+      case "FILE_UPLOAD":
+        settings = { allowedTypes: ["image/*", "application/pdf"], maxSizeMB: 10 };
+        break;
+      case "ADDRESS":
+        settings = { includeCountry: true };
+        break;
+      case "HIDDEN":
+        settings = { defaultValue: "" };
+        break;
     }
 
     const newQuestion: Question = {
       id: crypto.randomUUID(),
       type,
       title: "",
-      required: type === "SECTION_HEADER" ? false : false,
+      required: type === "SECTION_HEADER" || type === "HIDDEN" ? false : false,
       options,
       settings,
     };
@@ -1577,6 +1815,130 @@ export default function NewSurveyPage() {
             <p className="text-[#6b6b7b]">Start with a template or build from scratch</p>
           </div>
 
+          {/* AI Generation & Import Cards */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-4"
+          >
+            {/* Generate with AI */}
+            <button
+              onClick={() => setShowAIGenerator(true)}
+              className="text-left p-5 rounded-xl border-2 border-dashed border-[#8b5cf6] bg-gradient-to-br from-[#8b5cf6]/5 to-[#d946ef]/5 hover:from-[#8b5cf6]/10 hover:to-[#d946ef]/10 hover:border-[#8b5cf6] transition-all group relative overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-[#8b5cf6]/5 to-[#d946ef]/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="relative flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#8b5cf6] to-[#d946ef] flex items-center justify-center flex-shrink-0">
+                  <Sparkles className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-['Syne'] font-semibold text-base mb-1">Generate with AI</h3>
+                  <p className="text-xs text-[#6b6b7b]">
+                    Use OpenRouter to generate automatically
+                  </p>
+                </div>
+              </div>
+            </button>
+
+            {/* Copy Prompt for Claude */}
+            <button
+              onClick={() => {
+                const claudePrompt = `Create a survey for me about [YOUR TOPIC HERE]. Return ONLY valid JSON, no other text.
+
+Use this exact format:
+{
+  "title": "Survey Title",
+  "description": "Optional survey description",
+  "questions": [
+    {
+      "type": "QUESTION_TYPE",
+      "title": "Question text",
+      "description": "Optional helper text",
+      "required": true,
+      "options": ["Option 1", "Option 2"],
+      "settings": {}
+    }
+  ]
+}
+
+AVAILABLE QUESTION TYPES:
+
+TEXT INPUTS:
+- SHORT_TEXT: Single line text (names, brief answers)
+- LONG_TEXT: Multi-line text area (detailed feedback)
+- EMAIL: Email with validation
+- PHONE: Phone number
+- NUMBER: Numeric input. Use settings: { "min": 0, "max": 100 }
+- DATE: Date picker
+- TIME: Time picker
+
+CHOICE QUESTIONS (use "options" array):
+- SINGLE_CHOICE: Radio buttons, pick one
+- MULTIPLE_CHOICE: Checkboxes, pick multiple
+- DROPDOWN: Select from list (good for 5+ options)
+- YES_NO: Simple yes/no toggle
+- IMAGE_CHOICE: Pick from images
+
+RATING/SCALE:
+- RATING: Star rating 1-5
+- SCALE: Linear scale. Use settings: { "min": 1, "max": 10, "minLabel": "Poor", "maxLabel": "Excellent" }
+- NPS: Net Promoter Score 0-10 ("How likely to recommend?")
+- LIKERT: Agreement scale (Strongly Disagree to Strongly Agree)
+- SLIDER: Visual slider. Use settings: { "min": 0, "max": 100 }
+
+ADVANCED:
+- MATRIX: Rate multiple items on same scale. Use options for items, settings: { "scale": ["Poor", "Fair", "Good", "Excellent"] }
+- RANKING: Drag to order items by preference (use options array)
+- CONSTANT_SUM: Distribute points across options. Use settings: { "total": 100 }
+
+DISPLAY:
+- SECTION_HEADER: Section break with title (no input, just organizes the survey)
+
+GUIDELINES:
+1. Use SECTION_HEADER to organize into logical sections
+2. Mix question types appropriately
+3. Use RATING or NPS for satisfaction questions
+4. Use required: true for essential questions
+5. Keep surveys focused (5-15 questions typically)`;
+                navigator.clipboard.writeText(claudePrompt);
+                alert("Prompt copied! Paste it in Claude Desktop and describe your survey topic.");
+              }}
+              className="text-left p-5 rounded-xl border-2 border-dashed border-[#f59e0b] bg-gradient-to-br from-[#f59e0b]/5 to-[#d97706]/5 hover:from-[#f59e0b]/10 hover:to-[#d97706]/10 hover:border-[#f59e0b] transition-all group relative overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-[#f59e0b]/5 to-[#d97706]/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="relative flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#f59e0b] to-[#d97706] flex items-center justify-center flex-shrink-0">
+                  <Copy className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-['Syne'] font-semibold text-base mb-1">Copy Prompt for Claude</h3>
+                  <p className="text-xs text-[#6b6b7b]">
+                    Get a prompt to use with Claude Desktop
+                  </p>
+                </div>
+              </div>
+            </button>
+
+            {/* Import JSON */}
+            <button
+              onClick={() => setShowImporter(true)}
+              className="text-left p-5 rounded-xl border-2 border-dashed border-[#10b981] bg-gradient-to-br from-[#10b981]/5 to-[#059669]/5 hover:from-[#10b981]/10 hover:to-[#059669]/10 hover:border-[#10b981] transition-all group relative overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-[#10b981]/5 to-[#059669]/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="relative flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#10b981] to-[#059669] flex items-center justify-center flex-shrink-0">
+                  <FileJson className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-['Syne'] font-semibold text-base mb-1">Import JSON</h3>
+                  <p className="text-xs text-[#6b6b7b]">
+                    Paste survey JSON from Claude
+                  </p>
+                </div>
+              </div>
+            </button>
+          </motion.div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {surveyTemplates.map((template) => (
               <button
@@ -1597,6 +1959,214 @@ export default function NewSurveyPage() {
               </button>
             ))}
           </div>
+
+          {/* AI Generator Modal */}
+          <AnimatePresence>
+            {showAIGenerator && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+                onClick={() => setShowAIGenerator(false)}
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden"
+                >
+                  <div className="p-6 border-b border-[#dcd6f6]">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#8b5cf6] to-[#d946ef] flex items-center justify-center">
+                          <Sparkles className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-['Syne'] font-semibold text-lg">Generate with AI</h3>
+                          <p className="text-xs text-[#6b6b7b]">Describe your survey idea</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setShowAIGenerator(false)}
+                        className="text-[#6b6b7b] hover:text-[#1a1a2e] transition-colors"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-6">
+                    <Textarea
+                      placeholder="e.g., Create a customer satisfaction survey for a coffee shop, asking about drink quality, service speed, atmosphere, and likelihood to recommend..."
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      className="min-h-[120px] resize-none"
+                      disabled={aiGenerating}
+                    />
+
+                    {aiError && (
+                      <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                        {aiError}
+                      </div>
+                    )}
+
+                    <div className="mt-4 p-3 bg-[#dcd6f6]/30 rounded-lg">
+                      <p className="text-xs text-[#6b6b7b]">
+                        <strong>Tip:</strong> Be specific about what you want to learn. Include the topic, target audience, and any specific questions or areas you want to cover.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-6 pt-0 flex gap-3">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => setShowAIGenerator(false)}
+                      disabled={aiGenerating}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      className="flex-1 bg-gradient-to-r from-[#8b5cf6] to-[#d946ef] hover:from-[#7c3aed] hover:to-[#c026d3]"
+                      onClick={generateWithAI}
+                      disabled={aiGenerating || !aiPrompt.trim()}
+                    >
+                      {aiGenerating ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4 mr-2" />
+                          Generate Survey
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Import JSON Modal */}
+          <AnimatePresence>
+            {showImporter && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+                onClick={() => setShowImporter(false)}
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col"
+                >
+                  <div className="p-6 border-b border-[#dcd6f6]">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#10b981] to-[#059669] flex items-center justify-center">
+                          <FileJson className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-['Syne'] font-semibold text-lg">Import Survey JSON</h3>
+                          <p className="text-xs text-[#6b6b7b]">Paste JSON from Claude or any AI</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setShowImporter(false)}
+                        className="text-[#6b6b7b] hover:text-[#1a1a2e] transition-colors"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-6 flex-1 overflow-auto">
+                    <Textarea
+                      placeholder='{"title": "My Survey", "questions": [...]}'
+                      value={importJson}
+                      onChange={(e) => setImportJson(e.target.value)}
+                      className="min-h-[200px] font-mono text-sm resize-none"
+                    />
+
+                    {importError && (
+                      <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                        {importError}
+                      </div>
+                    )}
+
+                    <div className="mt-4 p-4 bg-[#dcd6f6]/30 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-medium text-[#1a1a2e]">JSON Format for Claude:</p>
+                        <button
+                          onClick={() => {
+                            const template = `{
+  "title": "Your Survey Title",
+  "description": "Optional description",
+  "questions": [
+    {
+      "type": "SINGLE_CHOICE",
+      "title": "Your question?",
+      "required": true,
+      "options": ["Option 1", "Option 2", "Option 3"]
+    },
+    {
+      "type": "RATING",
+      "title": "How would you rate...?",
+      "required": true
+    },
+    {
+      "type": "LONG_TEXT",
+      "title": "Any additional feedback?",
+      "required": false
+    }
+  ]
+}`;
+                            navigator.clipboard.writeText(template);
+                          }}
+                          className="text-xs text-[#8b5cf6] hover:text-[#7c3aed] flex items-center gap-1"
+                        >
+                          <Copy className="w-3 h-3" />
+                          Copy template
+                        </button>
+                      </div>
+                      <p className="text-xs text-[#6b6b7b] mb-2">
+                        Ask Claude: "Create a survey about [topic] using this JSON format"
+                      </p>
+                      <p className="text-xs text-[#6b6b7b]">
+                        <strong>Question types:</strong> SHORT_TEXT, LONG_TEXT, SINGLE_CHOICE, MULTIPLE_CHOICE, RATING, SCALE, NPS, YES_NO, DROPDOWN, EMAIL, PHONE, NUMBER, DATE, TIME, LIKERT, SLIDER, MATRIX, RANKING, CONSTANT_SUM, SECTION_HEADER
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-6 pt-0 flex gap-3">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => setShowImporter(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      className="flex-1 bg-gradient-to-r from-[#10b981] to-[#059669] hover:from-[#059669] hover:to-[#047857]"
+                      onClick={importSurvey}
+                      disabled={!importJson.trim()}
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      Import Survey
+                    </Button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     );
@@ -1733,6 +2303,7 @@ export default function NewSurveyPage() {
                     <div className="relative">
                       <input
                         type="checkbox"
+                        aria-label="Toggle anonymous responses"
                         checked={isAnonymous}
                         onChange={(e) => setIsAnonymous(e.target.checked)}
                         className="sr-only peer"

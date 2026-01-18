@@ -1,10 +1,30 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
+import { apiError, apiSuccess, validationError } from "@/lib/api-response";
+import { responseSchema, formatZodErrors } from "@/lib/validations";
+import { rateLimit } from "@/lib/rate-limit";
+import { Prisma } from "@/generated/prisma/client";
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting: 10 requests per minute per IP
+    const rateLimitResult = await rateLimit(request, {
+      limit: 10,
+      windowSeconds: 60,
+      prefix: "responses",
+    });
+    if (rateLimitResult) return rateLimitResult;
+
     const body = await request.json();
-    const { surveyId, answers, respondentEmail, respondentName } = body;
+
+    // Validate input
+    const result = responseSchema.safeParse(body);
+    if (!result.success) {
+      return validationError(formatZodErrors(result.error));
+    }
+
+    const { surveyId, answers, respondentEmail, respondentName } = result.data;
 
     // Validate survey exists and is published
     const survey = await db.survey.findUnique({
@@ -12,22 +32,22 @@ export async function POST(request: NextRequest) {
     });
 
     if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+      return apiError("Survey not found", 404);
     }
 
     if (!survey.published) {
-      return NextResponse.json({ error: "Survey is not available" }, { status: 403 });
+      return apiError("Survey is not available", 403);
     }
 
     // Check if survey is closed
     if (survey.closesAt && new Date(survey.closesAt) < new Date()) {
-      return NextResponse.json({ error: "Survey has closed" }, { status: 403 });
+      return apiError("Survey has closed", 403);
     }
 
     // For INVITE_ONLY surveys, verify email and check if already completed
     if (survey.accessType === "INVITE_ONLY") {
       if (!respondentEmail) {
-        return NextResponse.json({ error: "Email required for invite-only survey" }, { status: 400 });
+        return apiError("Email required for invite-only survey", 400);
       }
 
       const invitation = await db.invitation.findUnique({
@@ -40,11 +60,11 @@ export async function POST(request: NextRequest) {
       });
 
       if (!invitation) {
-        return NextResponse.json({ error: "Not invited to this survey" }, { status: 403 });
+        return apiError("Not invited to this survey", 403);
       }
 
       if (invitation.completedAt) {
-        return NextResponse.json({ error: "You have already completed this survey" }, { status: 403 });
+        return apiError("You have already completed this survey", 403);
       }
     }
 
@@ -61,17 +81,15 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Create answers
+    // Create answers in bulk
     if (answers && answers.length > 0) {
-      for (const answer of answers) {
-        await db.answer.create({
-          data: {
-            responseId: response.id,
-            questionId: answer.questionId,
-            value: answer.value,
-          },
-        });
-      }
+      await db.answer.createMany({
+        data: answers.map((answer) => ({
+          responseId: response.id,
+          questionId: answer.questionId,
+          value: answer.value as Prisma.InputJsonValue,
+        })),
+      });
     }
 
     // Mark invitation as completed for INVITE_ONLY surveys
@@ -90,12 +108,9 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ success: true, responseId: response.id }, { status: 201 });
+    return apiSuccess({ success: true, responseId: response.id }, 201);
   } catch (error) {
-    console.error("Error creating response:", error);
-    return NextResponse.json(
-      { error: "Failed to submit response" },
-      { status: 500 }
-    );
+    logger.error("Error creating response", error);
+    return apiError("Failed to submit response", 500);
   }
 }

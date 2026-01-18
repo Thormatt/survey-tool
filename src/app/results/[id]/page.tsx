@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { SkeletonResultsPage } from "@/components/ui/skeleton";
 import {
   Loader2,
   Users,
@@ -159,10 +160,9 @@ export default function PublicResultsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#fbf5ea] flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-[#FF4F01] mx-auto mb-4" />
-          <p className="text-[#6b6b7b]">Loading results...</p>
+      <div className="min-h-screen bg-[#fbf5ea] p-6">
+        <div className="max-w-6xl mx-auto">
+          <SkeletonResultsPage />
         </div>
       </div>
     );

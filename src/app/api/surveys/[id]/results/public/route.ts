@@ -1,11 +1,22 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
+import { apiError, apiSuccess } from "@/lib/api-response";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Rate limiting: 30 requests per minute per IP
+    const rateLimitResult = await rateLimit(request, {
+      limit: 30,
+      windowSeconds: 60,
+      prefix: "public-results",
+    });
+    if (rateLimitResult) return rateLimitResult;
+
     const { id } = await params;
 
     const survey = await db.survey.findUnique({
@@ -33,13 +44,13 @@ export async function GET(
     });
 
     if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+      return apiError("Survey not found", 404);
     }
 
     // Publicly accessible results don't require auth
     // Just return the data
 
-    return NextResponse.json({
+    return apiSuccess({
       id: survey.id,
       title: survey.title,
       description: survey.description,
@@ -64,10 +75,7 @@ export async function GET(
       _count: survey._count,
     });
   } catch (error) {
-    console.error("Error fetching public results:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch results" },
-      { status: 500 }
-    );
+    logger.error("Error fetching public results", error);
+    return apiError("Failed to fetch results", 500);
   }
 }

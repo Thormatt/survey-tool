@@ -1,6 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
+import { apiError, apiSuccess } from "@/lib/api-response";
+import { getPaginationParams, paginatedResponse, prismaPagination } from "@/lib/pagination";
 
 export async function GET(
   request: NextRequest,
@@ -9,30 +12,20 @@ export async function GET(
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("Unauthorized", 401);
     }
 
     const { id } = await params;
 
+    // First check survey ownership without loading all answers
     const survey = await db.survey.findUnique({
       where: { id },
-      include: {
-        questions: {
-          orderBy: { order: "asc" },
-          include: {
-            answers: {
-              include: {
-                response: {
-                  select: {
-                    completedAt: true,
-                    respondentEmail: true,
-                    respondentName: true,
-                  },
-                },
-              },
-            },
-          },
-        },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        isAnonymous: true,
+        userId: true,
         _count: {
           select: { responses: true },
         },
@@ -40,20 +33,55 @@ export async function GET(
     });
 
     if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+      return apiError("Survey not found", 404);
     }
 
     // Check ownership
     if (survey.userId !== userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("Unauthorized", 403);
     }
 
-    return NextResponse.json(survey);
+    const pagination = getPaginationParams(request);
+
+    // Get questions with paginated answers
+    const questions = await db.question.findMany({
+      where: { surveyId: id },
+      orderBy: { order: "asc" },
+      include: {
+        answers: {
+          ...prismaPagination(pagination),
+          include: {
+            response: {
+              select: {
+                completedAt: true,
+                respondentEmail: true,
+                respondentName: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Get total answers count for pagination
+    const totalAnswers = await db.answer.count({
+      where: {
+        question: { surveyId: id },
+      },
+    });
+
+    return apiSuccess({
+      ...survey,
+      questions,
+      pagination: {
+        page: pagination.page,
+        limit: pagination.limit,
+        totalAnswers,
+        totalPages: Math.ceil(totalAnswers / pagination.limit),
+      },
+    });
   } catch (error) {
-    console.error("Error fetching survey results:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch results" },
-      { status: 500 }
-    );
+    logger.error("Error fetching survey results", error);
+    return apiError("Failed to fetch results", 500);
   }
 }

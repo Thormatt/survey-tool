@@ -1196,7 +1196,10 @@ function QuestionResults({
           question.type === "NUMBER" ||
           question.type === "DATE" ||
           question.type === "PHONE" ||
-          question.type === "TIME") && (
+          question.type === "TIME" ||
+          question.type === "URL" ||
+          question.type === "FILE_UPLOAD" ||
+          question.type === "SIGNATURE") && (
           <div className="space-y-3 max-h-80 overflow-y-auto">
             {question.answers.length === 0 ? (
               <p className="text-[#6b6b7b] text-sm italic text-center py-8">No responses yet</p>
@@ -1617,6 +1620,59 @@ function QuestionResults({
             </div>
           );
         })()}
+
+        {/* Address responses - Formatted address cards */}
+        {question.type === "ADDRESS" && (
+          <div className="space-y-3 max-h-80 overflow-y-auto">
+            {question.answers.length === 0 ? (
+              <p className="text-[#6b6b7b] text-sm italic text-center py-8">No responses yet</p>
+            ) : (
+              question.answers.map((answer, i) => {
+                const addr = answer.value as { street?: string; city?: string; state?: string; zip?: string; country?: string } | null;
+                return (
+                  <div
+                    key={answer.id}
+                    className="p-4 bg-gradient-to-r from-white to-[#fbf5ea] rounded-xl border border-[#dcd6f6] hover:shadow-md transition-shadow"
+                  >
+                    <p className="text-[#1a1a2e] font-medium">{addr?.street || "No address"}</p>
+                    {(addr?.city || addr?.state || addr?.zip) && (
+                      <p className="text-[#1a1a2e] text-sm">
+                        {[addr?.city, addr?.state, addr?.zip].filter(Boolean).join(", ")}
+                      </p>
+                    )}
+                    {addr?.country && <p className="text-[#6b6b7b] text-sm">{addr.country}</p>}
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="w-6 h-6 rounded-full bg-[#dcd6f6] flex items-center justify-center text-xs font-medium">
+                        {i + 1}
+                      </div>
+                      <p className="text-xs text-[#6b6b7b]">
+                        {new Date(answer.response.completedAt).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {/* Hidden field - Show values for tracking */}
+        {question.type === "HIDDEN" && (
+          <div className="bg-[#f5f3ff] rounded-xl p-4 border border-dashed border-[#dcd6f6]">
+            <p className="text-[#6b6b7b] text-sm mb-2">Hidden tracking field values:</p>
+            {question.answers.length === 0 ? (
+              <p className="text-[#6b6b7b] text-sm italic">No values recorded</p>
+            ) : (
+              <div className="space-y-1">
+                {question.answers.map((answer, i) => (
+                  <div key={answer.id} className="text-xs text-[#1a1a2e]">
+                    {i + 1}. {String(answer.value) || "(empty)"}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
+import { apiError, apiSuccess } from "@/lib/api-response";
 
 export async function GET(
   request: NextRequest,
@@ -20,30 +22,23 @@ export async function GET(
     });
 
     if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+      return apiError("Survey not found", 404);
     }
 
     if (!survey.published) {
-      return NextResponse.json({ error: "Survey is not available" }, { status: 403 });
+      return apiError("Survey is not available", 403);
     }
 
     // Check if survey is closed
     if (survey.closesAt && new Date(survey.closesAt) < new Date()) {
-      return NextResponse.json({ error: "Survey has closed" }, { status: 403 });
+      return apiError("Survey has closed", 403);
     }
 
     // For INVITE_ONLY surveys, verify the user's email is invited
     if (survey.accessType === "INVITE_ONLY") {
       // No email provided = user not signed in
       if (!email) {
-        return NextResponse.json(
-          {
-            error: "Please sign in to access this survey",
-            accessType: "INVITE_ONLY",
-            requiresAuth: true,
-          },
-          { status: 403 }
-        );
+        return apiError("Please sign in to access this survey", 403);
       }
 
       // Check if this email has been invited
@@ -57,22 +52,12 @@ export async function GET(
       });
 
       if (!invitation) {
-        return NextResponse.json(
-          {
-            error: "Your email is not on the invite list for this survey",
-            accessType: "INVITE_ONLY",
-            notInvited: true,
-          },
-          { status: 403 }
-        );
+        return apiError("Your email is not on the invite list for this survey", 403);
       }
 
       // Check if already completed
       if (invitation.completedAt) {
-        return NextResponse.json(
-          { error: "You have already completed this survey" },
-          { status: 403 }
-        );
+        return apiError("You have already completed this survey", 403);
       }
 
       // Mark invitation as opened
@@ -85,7 +70,7 @@ export async function GET(
     }
 
     // Return survey data (PUBLIC and UNLISTED don't need special checks)
-    return NextResponse.json({
+    return apiSuccess({
       id: survey.id,
       title: survey.title,
       description: survey.description,
@@ -104,10 +89,7 @@ export async function GET(
       })),
     });
   } catch (error) {
-    console.error("Error fetching public survey:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch survey" },
-      { status: 500 }
-    );
+    logger.error("Error fetching public survey", error);
+    return apiError("Failed to fetch survey", 500);
   }
 }

@@ -1,15 +1,49 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 
+interface Answer {
+  id: string;
+  questionId: string;
+  value: unknown;
+  response: {
+    completedAt: string;
+    respondentEmail?: string | null;
+    respondentName?: string | null;
+  };
+}
+
+interface Question {
+  id: string;
+  type: string;
+  title: string;
+  description?: string | null;
+  required: boolean;
+  options?: string[] | null;
+  settings?: Record<string, unknown> | null;
+  answers: Answer[];
+}
+
+export interface Survey {
+  id: string;
+  title: string;
+  description?: string | null;
+  isAnonymous: boolean;
+  createdAt: string;
+  questions: Question[];
+  _count: {
+    responses: number;
+  };
+}
+
 interface RealtimeMessage {
   type: "connected" | "update" | "heartbeat";
-  survey?: unknown;
+  survey?: Survey;
   newResponses?: number;
 }
 
 interface UseRealtimeResultsOptions {
   surveyId: string;
   enabled?: boolean;
-  onUpdate?: (survey: unknown, newResponses: number) => void;
+  onUpdate?: (survey: Survey, newResponses: number) => void;
 }
 
 export function useRealtimeResults({

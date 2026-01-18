@@ -20,6 +20,11 @@ import {
   Clock,
   ChevronDown,
   GripVertical,
+  Globe,
+  MapPin,
+  Upload,
+  PenLine,
+  EyeOff,
 } from "lucide-react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
@@ -144,6 +149,13 @@ interface Question {
     total?: number;
     // Image Choice settings
     imageUrls?: Record<string, string>;
+    // File Upload settings
+    allowedTypes?: string[];
+    maxSizeMB?: number;
+    // Address settings
+    includeCountry?: boolean;
+    // Hidden field settings
+    defaultValue?: string;
   };
 }
 
@@ -302,8 +314,15 @@ export default function SurveyResponsePage() {
 
     // Question screens
     if (currentIndex >= 0 && currentQuestion) {
-      // SECTION_HEADER always allows proceeding (no answer needed)
-      if (currentQuestion.type === "SECTION_HEADER") return true;
+      // SECTION_HEADER and HIDDEN always allow proceeding (no answer needed)
+      if (currentQuestion.type === "SECTION_HEADER" || currentQuestion.type === "HIDDEN") return true;
+
+      // ADDRESS validation - need at least a street address if required
+      if (currentQuestion.type === "ADDRESS" && currentQuestion.required) {
+        const answer = answers[currentQuestion.id] as Record<string, string> | undefined;
+        if (!answer || !answer.street?.trim()) return false;
+        return true;
+      }
 
       // MATRIX validation - ensure all items have been rated if required
       if (currentQuestion.type === "MATRIX" && currentQuestion.required) {
@@ -532,7 +551,7 @@ export default function SurveyResponsePage() {
       <div className="min-h-screen bg-gradient-to-br from-[#1a1a2e] to-[#2d2d44] flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-12 h-12 animate-spin text-white/60 mx-auto" />
-          <p className="text-white/40 mt-4 text-sm">Loading survey...</p>
+          <p className="text-white/70 mt-4 text-sm">Loading survey...</p>
         </div>
       </div>
     );
@@ -569,7 +588,7 @@ export default function SurveyResponsePage() {
                 Your email address is not on the invite list for this survey.
               </p>
               {user?.primaryEmailAddress?.emailAddress && (
-                <p className="text-white/40 text-sm">
+                <p className="text-white/70 text-sm">
                   Signed in as: {user.primaryEmailAddress.emailAddress}
                 </p>
               )}
@@ -677,7 +696,7 @@ export default function SurveyResponsePage() {
             className="opacity-80"
           />
           {currentIndex >= 0 && (
-            <span className="text-white/40 text-sm font-medium">
+            <span className="text-white/70 text-sm font-medium">
               {currentIndex + 1} of {survey.questions.length}
             </span>
           )}
@@ -743,7 +762,7 @@ export default function SurveyResponsePage() {
               <h2 className="font-['Syne'] text-3xl md:text-4xl font-bold text-white mb-3">
                 Before we start, tell us about yourself
               </h2>
-              <p className="text-white/50 mb-10">
+              <p className="text-white/80 mb-10">
                 This survey collects your identity for follow-up purposes.
               </p>
 
@@ -790,7 +809,7 @@ export default function SurveyResponsePage() {
                 ) : (
                   <>
                     Question {survey!.questions.slice(0, currentIndex + 1).filter(q => q.type !== "SECTION_HEADER").length}
-                    {currentQuestion.required && <span className="text-white/40 ml-2">Required</span>}
+                    {currentQuestion.required && <span className="text-white/70 ml-2">Required</span>}
                   </>
                 )}
               </p>
@@ -805,7 +824,7 @@ export default function SurveyResponsePage() {
                     <span className="text-[#FF4F01]">&rdquo;</span>
                   </p>
                 ) : (
-                  <p className="text-white/50 mb-10">{currentQuestion.description}</p>
+                  <p className="text-white/80 mb-10">{currentQuestion.description}</p>
                 )
               )}
 
@@ -874,12 +893,16 @@ export default function SurveyResponsePage() {
                   variants={containerVariants}
                   initial="initial"
                   animate="animate"
+                  role="radiogroup"
+                  aria-label={currentQuestion.title}
                 >
                   {currentQuestion.options.map((option, idx) => {
                     const isSelected = answers[currentQuestion.id] === option;
                     return (
                       <motion.button
                         key={option}
+                        role="radio"
+                        aria-checked={isSelected}
                         variants={itemVariants}
                         whileHover={{ scale: 1.02, backgroundColor: isSelected ? "rgba(255, 79, 1, 0.15)" : "rgba(255, 255, 255, 0.08)" }}
                         whileTap={{ scale: 0.98 }}
@@ -952,7 +975,7 @@ export default function SurveyResponsePage() {
                       </motion.button>
                     );
                   })}
-                  <motion.p variants={itemVariants} className="text-white/40 text-sm mt-4">Select all that apply</motion.p>
+                  <motion.p variants={itemVariants} className="text-white/70 text-sm mt-4">Select all that apply</motion.p>
                 </motion.div>
               )}
 
@@ -1027,7 +1050,7 @@ export default function SurveyResponsePage() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.5 }}
-                    className="flex justify-between text-white/40 text-sm mt-4 px-1"
+                    className="flex justify-between text-white/70 text-sm mt-4 px-1"
                   >
                     <span>Not at all</span>
                     <span>Extremely</span>
@@ -1043,7 +1066,7 @@ export default function SurveyResponsePage() {
                   className="text-center py-8"
                 >
                   <div className="w-16 h-1 bg-[#FF4F01] mx-auto mb-8 rounded-full" />
-                  <p className="text-white/30 text-sm mt-4">
+                  <p className="text-white/70 text-sm mt-4">
                     Press Enter or click OK to continue
                   </p>
                 </motion.div>
@@ -1119,7 +1142,7 @@ export default function SurveyResponsePage() {
                   {/* Scale labels */}
                   <motion.div
                     variants={itemVariants}
-                    className="flex justify-between text-white/40 text-sm mt-4 px-3"
+                    className="flex justify-between text-white/70 text-sm mt-4 px-3"
                   >
                     <span>{(currentQuestion.settings as { scaleLabels?: Record<number, string> })?.scaleLabels?.[1] || "Low"}</span>
                     <span>{(currentQuestion.settings as { scaleLabels?: Record<number, string> })?.scaleLabels?.[5] || "High"}</span>
@@ -1164,6 +1187,7 @@ export default function SurveyResponsePage() {
                   className="relative"
                 >
                   <select
+                    aria-label={currentQuestion.title}
                     value={(answers[currentQuestion.id] as string) || ""}
                     onChange={(e) => {
                       updateAnswer(currentQuestion.id, e.target.value);
@@ -1257,7 +1281,7 @@ export default function SurveyResponsePage() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.5 }}
-                    className="flex justify-between text-white/40 text-sm mt-4 px-1"
+                    className="flex justify-between text-white/70 text-sm mt-4 px-1"
                   >
                     <span>{currentQuestion.settings?.minLabel || "Not at all likely"}</span>
                     <span>{currentQuestion.settings?.maxLabel || "Extremely likely"}</span>
@@ -1325,6 +1349,7 @@ export default function SurveyResponsePage() {
                   <div className="relative">
                     <input
                       type="range"
+                      aria-label={`${currentQuestion.title} slider, current value ${(answers[currentQuestion.id] as number) ?? currentQuestion.settings?.min ?? 0}`}
                       min={currentQuestion.settings?.min || 0}
                       max={currentQuestion.settings?.max || 100}
                       step={currentQuestion.settings?.step || 1}
@@ -1350,13 +1375,13 @@ export default function SurveyResponsePage() {
                     />
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-white/40 text-sm">{currentQuestion.settings?.min || 0}</span>
+                    <span className="text-white/70 text-sm">{currentQuestion.settings?.min || 0}</span>
                     <span className="text-white text-4xl font-bold">
                       {answers[currentQuestion.id] !== undefined
                         ? String(answers[currentQuestion.id])
                         : currentQuestion.settings?.min || 0}
                     </span>
-                    <span className="text-white/40 text-sm">{currentQuestion.settings?.max || 100}</span>
+                    <span className="text-white/70 text-sm">{currentQuestion.settings?.max || 100}</span>
                   </div>
                 </motion.div>
               )}
@@ -1369,7 +1394,7 @@ export default function SurveyResponsePage() {
                   animate="animate"
                   className="space-y-3"
                 >
-                  <p className="text-white/40 text-sm mb-4">Click items in order of preference (1st = most preferred)</p>
+                  <p className="text-white/70 text-sm mb-4">Click items in order of preference (1st = most preferred)</p>
                   {(() => {
                     const rankedItems = (answers[currentQuestion.id] as string[]) || [];
                     const unrankedItems = currentQuestion.options!.filter(
@@ -1394,7 +1419,8 @@ export default function SurveyResponsePage() {
                                 const newRanked = rankedItems.filter((i) => i !== item);
                                 updateAnswer(currentQuestion.id, newRanked);
                               }}
-                              className="text-white/40 hover:text-white transition-colors"
+                              aria-label={`Remove ${item} from ranking`}
+                              className="text-white/70 hover:text-white transition-colors"
                             >
                               ✕
                             </button>
@@ -1552,7 +1578,7 @@ export default function SurveyResponsePage() {
                           />
                         ) : (
                           <div className="absolute inset-0 bg-white/5 flex items-center justify-center">
-                            <span className="text-white/40 text-sm">No image</span>
+                            <span className="text-white/70 text-sm">No image</span>
                           </div>
                         )}
                         <div className={`absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 to-transparent ${
@@ -1568,6 +1594,153 @@ export default function SurveyResponsePage() {
                       </motion.button>
                     );
                   })}
+                </motion.div>
+              )}
+
+              {/* URL Input */}
+              {currentQuestion.type === "URL" && (
+                <motion.div variants={itemVariants} className="relative">
+                  <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/50" />
+                  <Input
+                    type="url"
+                    placeholder="https://example.com"
+                    value={(answers[currentQuestion.id] as string) || ""}
+                    onChange={(e) => updateAnswer(currentQuestion.id, e.target.value)}
+                    className="bg-white/10 border-white/10 text-white placeholder:text-white/50 text-lg py-6 pl-12 rounded-xl focus:border-[#FF4F01] focus:ring-[#FF4F01]"
+                  />
+                </motion.div>
+              )}
+
+              {/* Address Input */}
+              {currentQuestion.type === "ADDRESS" && (
+                <motion.div variants={containerVariants} className="space-y-4">
+                  <motion.div variants={itemVariants} className="relative">
+                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/50" />
+                    <Input
+                      placeholder="Street address"
+                      value={((answers[currentQuestion.id] as Record<string, string>) || {}).street || ""}
+                      onChange={(e) => updateAnswer(currentQuestion.id, {
+                        ...((answers[currentQuestion.id] as Record<string, string>) || {}),
+                        street: e.target.value,
+                      })}
+                      className="bg-white/10 border-white/10 text-white placeholder:text-white/50 text-lg py-6 pl-12 rounded-xl focus:border-[#FF4F01] focus:ring-[#FF4F01]"
+                    />
+                  </motion.div>
+                  <motion.div variants={itemVariants} className="grid grid-cols-2 gap-4">
+                    <Input
+                      placeholder="City"
+                      value={((answers[currentQuestion.id] as Record<string, string>) || {}).city || ""}
+                      onChange={(e) => updateAnswer(currentQuestion.id, {
+                        ...((answers[currentQuestion.id] as Record<string, string>) || {}),
+                        city: e.target.value,
+                      })}
+                      className="bg-white/10 border-white/10 text-white placeholder:text-white/50 text-lg py-6 rounded-xl focus:border-[#FF4F01] focus:ring-[#FF4F01]"
+                    />
+                    <Input
+                      placeholder="State/Province"
+                      value={((answers[currentQuestion.id] as Record<string, string>) || {}).state || ""}
+                      onChange={(e) => updateAnswer(currentQuestion.id, {
+                        ...((answers[currentQuestion.id] as Record<string, string>) || {}),
+                        state: e.target.value,
+                      })}
+                      className="bg-white/10 border-white/10 text-white placeholder:text-white/50 text-lg py-6 rounded-xl focus:border-[#FF4F01] focus:ring-[#FF4F01]"
+                    />
+                  </motion.div>
+                  <motion.div variants={itemVariants} className="grid grid-cols-2 gap-4">
+                    <Input
+                      placeholder="ZIP / Postal code"
+                      value={((answers[currentQuestion.id] as Record<string, string>) || {}).zip || ""}
+                      onChange={(e) => updateAnswer(currentQuestion.id, {
+                        ...((answers[currentQuestion.id] as Record<string, string>) || {}),
+                        zip: e.target.value,
+                      })}
+                      className="bg-white/10 border-white/10 text-white placeholder:text-white/50 text-lg py-6 rounded-xl focus:border-[#FF4F01] focus:ring-[#FF4F01]"
+                    />
+                    {currentQuestion.settings?.includeCountry !== false && (
+                      <Input
+                        placeholder="Country"
+                        value={((answers[currentQuestion.id] as Record<string, string>) || {}).country || ""}
+                        onChange={(e) => updateAnswer(currentQuestion.id, {
+                          ...((answers[currentQuestion.id] as Record<string, string>) || {}),
+                          country: e.target.value,
+                        })}
+                        className="bg-white/10 border-white/10 text-white placeholder:text-white/50 text-lg py-6 rounded-xl focus:border-[#FF4F01] focus:ring-[#FF4F01]"
+                      />
+                    )}
+                  </motion.div>
+                </motion.div>
+              )}
+
+              {/* File Upload */}
+              {currentQuestion.type === "FILE_UPLOAD" && (
+                <motion.div variants={itemVariants}>
+                  <label className="block">
+                    <div className="border-2 border-dashed border-white/20 rounded-xl p-10 text-center hover:border-[#FF4F01] hover:bg-white/5 transition-colors cursor-pointer">
+                      <Upload className="w-12 h-12 text-white/50 mx-auto mb-4" />
+                      <p className="text-white/70 mb-2">Click to upload or drag and drop</p>
+                      <p className="text-white/50 text-sm">
+                        {currentQuestion.settings?.allowedTypes?.join(", ") || "Any file type"}
+                        {currentQuestion.settings?.maxSizeMB && ` • Max ${currentQuestion.settings.maxSizeMB}MB`}
+                      </p>
+                      {(answers[currentQuestion.id] as string) && (
+                        <div className="mt-4 p-3 bg-[#FF4F01]/20 rounded-lg">
+                          <p className="text-white text-sm">File selected: {answers[currentQuestion.id] as string}</p>
+                        </div>
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      accept={currentQuestion.settings?.allowedTypes?.join(",")}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          updateAnswer(currentQuestion.id, file.name);
+                        }
+                      }}
+                      className="sr-only"
+                    />
+                  </label>
+                </motion.div>
+              )}
+
+              {/* Signature */}
+              {currentQuestion.type === "SIGNATURE" && (
+                <motion.div variants={itemVariants}>
+                  <div className="bg-white rounded-xl p-6">
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg h-40 flex items-center justify-center">
+                      {(answers[currentQuestion.id] as string) ? (
+                        <div className="text-center">
+                          <PenLine className="w-8 h-8 text-[#FF4F01] mx-auto mb-2" />
+                          <p className="text-gray-600 text-sm">Signature captured</p>
+                          <button
+                            onClick={() => updateAnswer(currentQuestion.id, "")}
+                            className="text-[#FF4F01] text-sm mt-2 hover:underline"
+                          >
+                            Clear signature
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => updateAnswer(currentQuestion.id, "signed-" + Date.now())}
+                          className="text-center"
+                        >
+                          <PenLine className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                          <p className="text-gray-500">Click to sign</p>
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-gray-500 text-xs text-center mt-3">
+                      By signing, you agree to the terms and conditions
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Hidden field - not rendered to respondent but included in data */}
+              {currentQuestion.type === "HIDDEN" && (
+                <motion.div variants={itemVariants} className="bg-white/5 border border-white/10 rounded-xl p-6 text-center">
+                  <EyeOff className="w-8 h-8 text-white/30 mx-auto mb-2" />
+                  <p className="text-white/50 text-sm">This is a hidden tracking field</p>
                 </motion.div>
               )}
 
@@ -1627,8 +1800,8 @@ export default function SurveyResponsePage() {
 
         {/* Keyboard hint */}
         <div className="text-center mt-4">
-          <p className="text-white/20 text-xs">
-            Press <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white/40">Enter ↵</kbd>
+          <p className="text-white/60 text-xs">
+            Press <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white/70">Enter ↵</kbd>
           </p>
         </div>
       </footer>

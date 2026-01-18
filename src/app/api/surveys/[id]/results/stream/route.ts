@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
 
 // Server-Sent Events endpoint for real-time survey results
 export async function GET(
@@ -50,7 +51,7 @@ export async function GET(
           });
 
           if (currentCount !== lastResponseCount) {
-            // Fetch updated survey data
+            // Fetch updated survey data (only when count changes)
             const updatedSurvey = await db.survey.findUnique({
               where: { id },
               include: {
@@ -95,7 +96,7 @@ export async function GET(
             encoder.encode(`data: ${JSON.stringify({ type: "heartbeat" })}\n\n`)
           );
         } catch (error) {
-          console.error("SSE poll error:", error);
+          logger.error("SSE poll error", error);
         }
       }, 5000);
     },

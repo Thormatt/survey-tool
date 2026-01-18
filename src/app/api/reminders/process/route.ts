@@ -1,18 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sendSurveyReminder } from "@/lib/email";
+import { logger } from "@/lib/logger";
+import { apiError, apiSuccess } from "@/lib/api-response";
 
 // This endpoint should be called by a cron job (e.g., Vercel Cron, external scheduler)
 // Example: Call every hour to process pending reminders
 
 export async function POST(request: NextRequest) {
   try {
-    // Optional: Add a secret token for security
+    // CRON_SECRET is mandatory for security
     const authHeader = request.headers.get("authorization");
     const cronSecret = process.env.CRON_SECRET;
 
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!cronSecret) {
+      logger.error("CRON_SECRET environment variable is not configured");
+      return apiError("Server configuration error", 500, "CONFIG_ERROR");
+    }
+
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      return apiError("Unauthorized", 401, "UNAUTHORIZED");
     }
 
     const now = new Date();
@@ -53,17 +60,23 @@ export async function POST(request: NextRequest) {
         if (daysRemaining <= 0) continue; // Survey has closed
       }
 
-      for (const invitation of survey.invitations) {
+      // Collect invitations that need reminders
+      const invitationsToRemind = survey.invitations.filter((invitation) => {
         // Check if already at max reminders
-        if (invitation.reminderCount >= maxReminders) continue;
+        if (invitation.reminderCount >= maxReminders) return false;
 
         // Check if enough time has passed since last reminder or initial send
         const lastContact = invitation.lastReminderAt || invitation.sentAt;
         const timeSinceLastContact = now.getTime() - lastContact.getTime();
 
-        if (timeSinceLastContact < intervalMs) continue;
+        return timeSinceLastContact >= intervalMs;
+      });
 
-        // Send reminder
+      // Track successful sends for batch update
+      const successfulInvitationIds: string[] = [];
+
+      // Send reminders
+      for (const invitation of invitationsToRemind) {
         try {
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
           const surveyLink = `${baseUrl}/s/${survey.id}?token=${invitation.token}`;
@@ -75,34 +88,35 @@ export async function POST(request: NextRequest) {
             daysRemaining,
           });
 
-          // Update invitation
-          await db.invitation.update({
-            where: { id: invitation.id },
-            data: {
-              reminderCount: invitation.reminderCount + 1,
-              lastReminderAt: now,
-            },
-          });
-
+          successfulInvitationIds.push(invitation.id);
           remindersSent++;
         } catch (emailError) {
+          logger.error(`Failed to send reminder to ${invitation.email}`, emailError);
           errors.push(`Failed to send reminder to ${invitation.email}: ${emailError}`);
         }
       }
+
+      // Batch update all invitations that were sent successfully
+      if (successfulInvitationIds.length > 0) {
+        await db.invitation.updateMany({
+          where: { id: { in: successfulInvitationIds } },
+          data: {
+            reminderCount: { increment: 1 },
+            lastReminderAt: now,
+          },
+        });
+      }
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       success: true,
       remindersSent,
       errors: errors.length > 0 ? errors : undefined,
       processedAt: now.toISOString(),
     });
   } catch (error) {
-    console.error("Error processing reminders:", error);
-    return NextResponse.json(
-      { error: "Failed to process reminders" },
-      { status: 500 }
-    );
+    logger.error("Error processing reminders", error);
+    return apiError("Failed to process reminders", 500);
   }
 }
 
@@ -126,15 +140,12 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json({
+    return apiSuccess({
       pendingInvitations: pendingReminders,
       surveysWithRemindersEnabled: surveysWithReminders,
     });
   } catch (error) {
-    console.error("Error checking reminder status:", error);
-    return NextResponse.json(
-      { error: "Failed to check status" },
-      { status: 500 }
-    );
+    logger.error("Error checking reminder status", error);
+    return apiError("Failed to check status", 500);
   }
 }

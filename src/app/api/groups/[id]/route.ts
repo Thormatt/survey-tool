@@ -1,6 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
+import { apiError, apiSuccess, validationError } from "@/lib/api-response";
+import { groupUpdateSchema, formatZodErrors } from "@/lib/validations";
 
 // GET - Get a single group with members
 export async function GET(
@@ -10,7 +13,7 @@ export async function GET(
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("Unauthorized", 401);
     }
 
     const { id } = await params;
@@ -28,20 +31,17 @@ export async function GET(
     });
 
     if (!group) {
-      return NextResponse.json({ error: "Group not found" }, { status: 404 });
+      return apiError("Group not found", 404);
     }
 
     if (group.userId !== userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("Unauthorized", 403);
     }
 
-    return NextResponse.json(group);
+    return apiSuccess(group);
   } catch (error) {
-    console.error("Error fetching group:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch group" },
-      { status: 500 }
-    );
+    logger.error("Error fetching group", error);
+    return apiError("Failed to fetch group", 500);
   }
 }
 
@@ -53,12 +53,19 @@ export async function PATCH(
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("Unauthorized", 401);
     }
 
     const { id } = await params;
     const body = await request.json();
-    const { name, color, addMembers, removeMembers } = body;
+
+    // Validate input
+    const result = groupUpdateSchema.safeParse(body);
+    if (!result.success) {
+      return validationError(formatZodErrors(result.error));
+    }
+
+    const { name, color, addMembers, removeMembers } = result.data;
 
     // Check ownership
     const group = await db.emailGroup.findUnique({
@@ -66,11 +73,11 @@ export async function PATCH(
     });
 
     if (!group) {
-      return NextResponse.json({ error: "Group not found" }, { status: 404 });
+      return apiError("Group not found", 404);
     }
 
     if (group.userId !== userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("Unauthorized", 403);
     }
 
     // Update group
@@ -79,9 +86,9 @@ export async function PATCH(
     if (color !== undefined) updateData.color = color;
 
     // Handle member additions
-    if (addMembers?.length > 0) {
+    if (addMembers && addMembers.length > 0) {
       await db.emailGroupMember.createMany({
-        data: addMembers.map((m: { email: string; name?: string }) => ({
+        data: addMembers.map((m) => ({
           groupId: id,
           email: m.email.toLowerCase().trim(),
           name: m.name?.trim() || null,
@@ -91,11 +98,11 @@ export async function PATCH(
     }
 
     // Handle member removals
-    if (removeMembers?.length > 0) {
+    if (removeMembers && removeMembers.length > 0) {
       await db.emailGroupMember.deleteMany({
         where: {
           groupId: id,
-          email: { in: removeMembers.map((e: string) => e.toLowerCase()) },
+          email: { in: removeMembers.map((e) => e.toLowerCase()) },
         },
       });
     }
@@ -113,13 +120,10 @@ export async function PATCH(
       },
     });
 
-    return NextResponse.json(updatedGroup);
+    return apiSuccess(updatedGroup);
   } catch (error) {
-    console.error("Error updating group:", error);
-    return NextResponse.json(
-      { error: "Failed to update group" },
-      { status: 500 }
-    );
+    logger.error("Error updating group", error);
+    return apiError("Failed to update group", 500);
   }
 }
 
@@ -131,7 +135,7 @@ export async function DELETE(
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("Unauthorized", 401);
     }
 
     const { id } = await params;
@@ -142,23 +146,20 @@ export async function DELETE(
     });
 
     if (!group) {
-      return NextResponse.json({ error: "Group not found" }, { status: 404 });
+      return apiError("Group not found", 404);
     }
 
     if (group.userId !== userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("Unauthorized", 403);
     }
 
     await db.emailGroup.delete({
       where: { id },
     });
 
-    return NextResponse.json({ success: true });
+    return apiSuccess({ success: true });
   } catch (error) {
-    console.error("Error deleting group:", error);
-    return NextResponse.json(
-      { error: "Failed to delete group" },
-      { status: 500 }
-    );
+    logger.error("Error deleting group", error);
+    return apiError("Failed to delete group", 500);
   }
 }

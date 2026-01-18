@@ -1,17 +1,29 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
+import { apiError, apiSuccess, validationError } from "@/lib/api-response";
+import { groupSchema, formatZodErrors } from "@/lib/validations";
+import { getPaginationParams, paginatedResponse, prismaPagination } from "@/lib/pagination";
 
 // GET - List all groups for the user
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("Unauthorized", 401);
     }
+
+    const pagination = getPaginationParams(request);
+
+    // Get total count for pagination
+    const total = await db.emailGroup.count({
+      where: { userId },
+    });
 
     const groups = await db.emailGroup.findMany({
       where: { userId },
+      ...prismaPagination(pagination),
       include: {
         _count: {
           select: { members: true },
@@ -27,13 +39,10 @@ export async function GET() {
       orderBy: { name: "asc" },
     });
 
-    return NextResponse.json(groups);
+    return apiSuccess(paginatedResponse(groups, total, pagination));
   } catch (error) {
-    console.error("Error fetching groups:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch groups" },
-      { status: 500 }
-    );
+    logger.error("Error fetching groups", error);
+    return apiError("Failed to fetch groups", 500);
   }
 }
 
@@ -42,24 +51,27 @@ export async function POST(request: NextRequest) {
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("Unauthorized", 401);
     }
 
     const body = await request.json();
-    const { name, color, members } = body;
 
-    if (!name?.trim()) {
-      return NextResponse.json({ error: "Group name is required" }, { status: 400 });
+    // Validate input
+    const result = groupSchema.safeParse(body);
+    if (!result.success) {
+      return validationError(formatZodErrors(result.error));
     }
+
+    const { name, color, members } = result.data;
 
     // Create group with optional members
     const group = await db.emailGroup.create({
       data: {
-        name: name.trim(),
+        name,
         userId,
         color: color || null,
-        members: members?.length > 0 ? {
-          create: members.map((m: { email: string; name?: string }) => ({
+        members: members.length > 0 ? {
+          create: members.map((m) => ({
             email: m.email.toLowerCase().trim(),
             name: m.name?.trim() || null,
           })),
@@ -73,18 +85,12 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(group, { status: 201 });
+    return apiSuccess(group, 201);
   } catch (error: unknown) {
-    console.error("Error creating group:", error);
+    logger.error("Error creating group", error);
     if (error instanceof Error && error.message.includes("Unique constraint")) {
-      return NextResponse.json(
-        { error: "A group with this name already exists" },
-        { status: 409 }
-      );
+      return apiError("A group with this name already exists", 409);
     }
-    return NextResponse.json(
-      { error: "Failed to create group" },
-      { status: 500 }
-    );
+    return apiError("Failed to create group", 500);
   }
 }

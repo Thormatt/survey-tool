@@ -1,7 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { Resend } from "resend";
+import { logger } from "@/lib/logger";
+import { apiError, apiSuccess } from "@/lib/api-response";
+import { escapeHtml } from "@/lib/html";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -12,7 +15,7 @@ export async function POST(
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("Unauthorized", 401);
     }
 
     const { id } = await params;
@@ -51,7 +54,7 @@ export async function POST(
     });
 
     if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+      return apiError("Survey not found", 404);
     }
 
     // Collect unique emails to send to
@@ -70,10 +73,7 @@ export async function POST(
     }
 
     if (emails.size === 0) {
-      return NextResponse.json(
-        { error: "No participants to send results to" },
-        { status: 400 }
-      );
+      return apiError("No participants to send results to", 400);
     }
 
     // Calculate statistics for email
@@ -128,45 +128,53 @@ export async function POST(
       };
     });
 
-    // Generate beautiful HTML email
+    // Generate beautiful HTML email with escaped user content
     const resultsUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://localhost:3000"}/results/${survey.id}`;
 
     const htmlEmail = generateResultsEmail({
-      surveyTitle: survey.title,
-      surveyDescription: survey.description || "",
+      surveyTitle: escapeHtml(survey.title),
+      surveyDescription: survey.description ? escapeHtml(survey.description) : "",
       totalResponses,
-      questionStats,
+      questionStats: questionStats.map((q) => ({
+        ...q,
+        title: escapeHtml(q.title),
+        topResponse: q.topResponse ? escapeHtml(q.topResponse) : null,
+      })),
       resultsUrl,
     });
 
-    // Send emails
+    // Send emails in batches
     const emailList = Array.from(emails);
-    const results = await Promise.allSettled(
-      emailList.map((email) =>
-        resend.emails.send({
-          from: process.env.RESEND_FROM_EMAIL || "Survey Tool <onboarding@resend.dev>",
-          to: email,
-          subject: `Survey Results: ${survey.title}`,
-          html: htmlEmail,
-        })
-      )
-    );
+    const BATCH_SIZE = 10;
+    let successful = 0;
+    let failed = 0;
 
-    const successful = results.filter((r) => r.status === "fulfilled").length;
-    const failed = results.filter((r) => r.status === "rejected").length;
+    for (let i = 0; i < emailList.length; i += BATCH_SIZE) {
+      const batch = emailList.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((email) =>
+          resend.emails.send({
+            from: process.env.RESEND_FROM_EMAIL || "Survey Tool <onboarding@resend.dev>",
+            to: email,
+            subject: `Survey Results: ${survey.title}`,
+            html: htmlEmail,
+          })
+        )
+      );
 
-    return NextResponse.json({
+      successful += results.filter((r) => r.status === "fulfilled").length;
+      failed += results.filter((r) => r.status === "rejected").length;
+    }
+
+    return apiSuccess({
       success: true,
       sent: successful,
       failed,
       total: emailList.length,
     });
   } catch (error) {
-    console.error("Error sending results email:", error);
-    return NextResponse.json(
-      { error: "Failed to send results email" },
-      { status: 500 }
-    );
+    logger.error("Error sending results email", error);
+    return apiError("Failed to send results email", 500);
   }
 }
 

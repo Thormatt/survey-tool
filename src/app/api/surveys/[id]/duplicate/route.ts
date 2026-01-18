@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
+import { logger } from "@/lib/logger";
+import { apiError, apiSuccess } from "@/lib/api-response";
 
 export async function POST(
   request: NextRequest,
@@ -10,7 +12,7 @@ export async function POST(
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("Unauthorized", 401);
     }
 
     const { id } = await params;
@@ -29,7 +31,7 @@ export async function POST(
     });
 
     if (!original) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+      return apiError("Survey not found", 404);
     }
 
     // Create the duplicate survey (as draft)
@@ -45,10 +47,10 @@ export async function POST(
       },
     });
 
-    // Duplicate all questions
-    for (const question of original.questions) {
-      await db.question.create({
-        data: {
+    // Duplicate all questions in bulk
+    if (original.questions.length > 0) {
+      await db.question.createMany({
+        data: original.questions.map((question) => ({
           surveyId: duplicateSurvey.id,
           type: question.type,
           title: question.title,
@@ -57,7 +59,7 @@ export async function POST(
           order: question.order,
           options: question.options as Prisma.InputJsonValue | undefined,
           settings: question.settings as Prisma.InputJsonValue | undefined,
-        },
+        })),
       });
     }
 
@@ -74,12 +76,9 @@ export async function POST(
       },
     });
 
-    return NextResponse.json(completeSurvey, { status: 201 });
+    return apiSuccess(completeSurvey, 201);
   } catch (error) {
-    console.error("Error duplicating survey:", error);
-    return NextResponse.json(
-      { error: "Failed to duplicate survey" },
-      { status: 500 }
-    );
+    logger.error("Error duplicating survey", error);
+    return apiError("Failed to duplicate survey", 500);
   }
 }

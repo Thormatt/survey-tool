@@ -1,16 +1,28 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
+import { apiError, apiSuccess, validationError } from "@/lib/api-response";
+import { surveySchema, formatZodErrors } from "@/lib/validations";
+import { getPaginationParams, paginatedResponse, prismaPagination } from "@/lib/pagination";
+import { Prisma, QuestionType } from "@/generated/prisma/client";
 
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("Unauthorized", 401);
     }
 
     const body = await request.json();
-    const { title, description, published, questions, accessType, isAnonymous, closesAt } = body;
+
+    // Validate input
+    const result = surveySchema.safeParse(body);
+    if (!result.success) {
+      return validationError(formatZodErrors(result.error));
+    }
+
+    const { title, description, published, questions, accessType, isAnonymous, closesAt } = result.data;
 
     // Create survey first (without nested questions to avoid transaction)
     const survey = await db.survey.create({
@@ -27,21 +39,18 @@ export async function POST(request: NextRequest) {
 
     // Create questions separately
     if (questions && questions.length > 0) {
-      for (let i = 0; i < questions.length; i++) {
-        const q = questions[i];
-        await db.question.create({
-          data: {
-            surveyId: survey.id,
-            type: q.type,
-            title: q.title,
-            description: q.description,
-            required: q.required ?? false,
-            order: i,
-            options: q.options ?? null,
-            settings: q.settings ?? null,
-          },
-        });
-      }
+      await db.question.createMany({
+        data: questions.map((q, i) => ({
+          surveyId: survey.id,
+          type: q.type as QuestionType,
+          title: q.title,
+          description: q.description,
+          required: q.required ?? false,
+          order: i,
+          options: q.options as Prisma.InputJsonValue ?? null,
+          settings: q.settings as Prisma.InputJsonValue ?? null,
+        })),
+      });
     }
 
     // Fetch the complete survey with questions
@@ -57,26 +66,31 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(completeSurvey, { status: 201 });
+    return apiSuccess(completeSurvey, 201);
   } catch (error) {
-    console.error("Error creating survey:", error);
-    return NextResponse.json(
-      { error: "Failed to create survey" },
-      { status: 500 }
-    );
+    logger.error("Error creating survey", error);
+    return apiError("Failed to create survey", 500);
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("Unauthorized", 401);
     }
+
+    const pagination = getPaginationParams(request);
+
+    // Get total count for pagination
+    const total = await db.survey.count({
+      where: { userId },
+    });
 
     const surveys = await db.survey.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
+      ...prismaPagination(pagination),
       include: {
         questions: {
           orderBy: { order: "asc" },
@@ -87,12 +101,9 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json(surveys);
+    return apiSuccess(paginatedResponse(surveys, total, pagination));
   } catch (error) {
-    console.error("Error fetching surveys:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch surveys" },
-      { status: 500 }
-    );
+    logger.error("Error fetching surveys", error);
+    return apiError("Failed to fetch surveys", 500);
   }
 }
