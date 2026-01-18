@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -181,6 +181,350 @@ const questionTypes: {
   { type: "RANKING", label: "Ranking", icon: <ListOrdered className="w-4 h-4" />, description: "Order by preference", category: "advanced" },
   { type: "CONSTANT_SUM", label: "Constant Sum", icon: <PieChart className="w-4 h-4" />, description: "Distribute points", category: "advanced" },
 ];
+
+// Question Type Preview Component - shows realistic preview of how each question type looks
+function QuestionTypePreview({ type }: { type: QuestionType }) {
+  const previewStyles = "text-xs text-[#1a1a2e]";
+  const labelStyles = "text-[10px] text-[#6b6b7b] mb-1";
+
+  switch (type) {
+    case "SECTION_HEADER":
+      return (
+        <div className="space-y-1">
+          <div className="h-px bg-[#dcd6f6] w-full" />
+          <p className="font-['Syne'] font-semibold text-sm text-[#1a1a2e]">Section Title</p>
+          <p className="text-[10px] text-[#6b6b7b]">Optional description for this section</p>
+        </div>
+      );
+    case "SHORT_TEXT":
+      return (
+        <div>
+          <p className={labelStyles}>Your answer</p>
+          <div className="border border-[#dcd6f6] rounded px-2 py-1.5 bg-white">
+            <span className={`${previewStyles} text-[#9b9bab]`}>Type your answer...</span>
+          </div>
+        </div>
+      );
+    case "LONG_TEXT":
+      return (
+        <div>
+          <p className={labelStyles}>Your answer</p>
+          <div className="border border-[#dcd6f6] rounded px-2 py-1.5 bg-white h-12">
+            <span className={`${previewStyles} text-[#9b9bab]`}>Type your detailed response...</span>
+          </div>
+        </div>
+      );
+    case "EMAIL":
+      return (
+        <div>
+          <p className={labelStyles}>Email address</p>
+          <div className="border border-[#dcd6f6] rounded px-2 py-1.5 bg-white flex items-center gap-1">
+            <Mail className="w-3 h-3 text-[#9b9bab]" />
+            <span className={`${previewStyles} text-[#9b9bab]`}>name@example.com</span>
+          </div>
+        </div>
+      );
+    case "PHONE":
+      return (
+        <div>
+          <p className={labelStyles}>Phone number</p>
+          <div className="border border-[#dcd6f6] rounded px-2 py-1.5 bg-white flex items-center gap-1">
+            <Phone className="w-3 h-3 text-[#9b9bab]" />
+            <span className={`${previewStyles} text-[#9b9bab]`}>+1 (555) 123-4567</span>
+          </div>
+        </div>
+      );
+    case "NUMBER":
+      return (
+        <div>
+          <p className={labelStyles}>Enter a number</p>
+          <div className="border border-[#dcd6f6] rounded px-2 py-1.5 bg-white w-20">
+            <span className={`${previewStyles} text-[#9b9bab]`}>42</span>
+          </div>
+        </div>
+      );
+    case "DATE":
+      return (
+        <div>
+          <p className={labelStyles}>Select date</p>
+          <div className="border border-[#dcd6f6] rounded px-2 py-1.5 bg-white flex items-center gap-1">
+            <Calendar className="w-3 h-3 text-[#9b9bab]" />
+            <span className={previewStyles}>Jan 15, 2025</span>
+          </div>
+        </div>
+      );
+    case "TIME":
+      return (
+        <div>
+          <p className={labelStyles}>Select time</p>
+          <div className="border border-[#dcd6f6] rounded px-2 py-1.5 bg-white flex items-center gap-1">
+            <Clock className="w-3 h-3 text-[#9b9bab]" />
+            <span className={previewStyles}>2:30 PM</span>
+          </div>
+        </div>
+      );
+    case "SINGLE_CHOICE":
+      return (
+        <div className="space-y-1">
+          {["Option A", "Option B", "Option C"].map((opt, i) => (
+            <label key={opt} className="flex items-center gap-2 cursor-pointer">
+              <div className={`w-3.5 h-3.5 rounded-full border-2 ${i === 1 ? "border-[#FF4F01] bg-[#FF4F01]" : "border-[#dcd6f6]"} flex items-center justify-center`}>
+                {i === 1 && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+              </div>
+              <span className={previewStyles}>{opt}</span>
+            </label>
+          ))}
+        </div>
+      );
+    case "MULTIPLE_CHOICE":
+      return (
+        <div className="space-y-1">
+          {["Option A", "Option B", "Option C"].map((opt, i) => (
+            <label key={opt} className="flex items-center gap-2 cursor-pointer">
+              <div className={`w-3.5 h-3.5 rounded border ${i === 0 || i === 2 ? "border-[#FF4F01] bg-[#FF4F01]" : "border-[#dcd6f6]"} flex items-center justify-center`}>
+                {(i === 0 || i === 2) && <CheckSquare className="w-2.5 h-2.5 text-white" />}
+              </div>
+              <span className={previewStyles}>{opt}</span>
+            </label>
+          ))}
+        </div>
+      );
+    case "DROPDOWN":
+      return (
+        <div>
+          <p className={labelStyles}>Select an option</p>
+          <div className="border border-[#dcd6f6] rounded px-2 py-1.5 bg-white flex items-center justify-between">
+            <span className={previewStyles}>Select...</span>
+            <ChevronDown className="w-3 h-3 text-[#6b6b7b]" />
+          </div>
+        </div>
+      );
+    case "YES_NO":
+      return (
+        <div className="flex gap-2">
+          <button className="flex-1 py-1.5 px-3 rounded-lg bg-[#FF4F01] text-white text-xs font-medium">
+            Yes
+          </button>
+          <button className="flex-1 py-1.5 px-3 rounded-lg border border-[#dcd6f6] text-xs">
+            No
+          </button>
+        </div>
+      );
+    case "IMAGE_CHOICE":
+      return (
+        <div className="grid grid-cols-3 gap-1">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className={`aspect-square rounded border-2 ${i === 2 ? "border-[#FF4F01]" : "border-[#dcd6f6]"} bg-[#f0f0f0] flex items-center justify-center`}>
+              <Image className="w-4 h-4 text-[#9b9bab]" />
+            </div>
+          ))}
+        </div>
+      );
+    case "RATING":
+      return (
+        <div className="flex gap-1">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <Star key={i} className={`w-5 h-5 ${i <= 4 ? "fill-[#FF4F01] text-[#FF4F01]" : "text-[#dcd6f6]"}`} />
+          ))}
+        </div>
+      );
+    case "SCALE":
+      return (
+        <div>
+          <div className="flex justify-between text-[10px] text-[#6b6b7b] mb-1">
+            <span>Not likely</span>
+            <span>Very likely</span>
+          </div>
+          <div className="flex gap-1">
+            {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+              <button key={i} className={`w-6 h-6 rounded text-[10px] font-medium ${i === 5 ? "bg-[#FF4F01] text-white" : "bg-[#dcd6f6]/50"}`}>
+                {i}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    case "NPS":
+      return (
+        <div>
+          <div className="flex justify-between text-[10px] text-[#6b6b7b] mb-1">
+            <span>Not likely</span>
+            <span>Very likely</span>
+          </div>
+          <div className="flex gap-0.5">
+            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
+              <button key={i} className={`w-4 h-5 rounded-sm text-[8px] font-medium ${i === 8 ? "bg-[#FF4F01] text-white" : i <= 6 ? "bg-red-100" : i <= 8 ? "bg-yellow-100" : "bg-green-100"}`}>
+                {i}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    case "LIKERT":
+      return (
+        <div className="flex gap-1">
+          {["😞", "😕", "😐", "🙂", "😊"].map((emoji, i) => (
+            <button key={emoji} className={`w-7 h-7 rounded-full text-sm ${i === 3 ? "bg-[#FF4F01]/20 ring-2 ring-[#FF4F01]" : "bg-[#dcd6f6]/30"}`}>
+              {emoji}
+            </button>
+          ))}
+        </div>
+      );
+    case "SLIDER":
+      return (
+        <div>
+          <div className="flex justify-between text-[10px] text-[#6b6b7b] mb-1">
+            <span>0</span>
+            <span className="font-medium text-[#FF4F01]">65</span>
+            <span>100</span>
+          </div>
+          <div className="relative h-2 bg-[#dcd6f6] rounded-full">
+            <div className="absolute left-0 top-0 h-2 bg-[#FF4F01] rounded-full" style={{ width: "65%" }} />
+            <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white border-2 border-[#FF4F01] rounded-full" style={{ left: "calc(65% - 6px)" }} />
+          </div>
+        </div>
+      );
+    case "MATRIX":
+      return (
+        <div className="space-y-1">
+          <div className="grid grid-cols-4 gap-1 text-[8px] text-[#6b6b7b]">
+            <div></div>
+            <div className="text-center">Low</div>
+            <div className="text-center">Med</div>
+            <div className="text-center">High</div>
+          </div>
+          {["Item 1", "Item 2"].map((item, i) => (
+            <div key={item} className="grid grid-cols-4 gap-1 items-center">
+              <span className="text-[9px]">{item}</span>
+              {[0, 1, 2].map((j) => (
+                <div key={j} className="flex justify-center">
+                  <div className={`w-3 h-3 rounded-full border ${(i === 0 && j === 2) || (i === 1 && j === 1) ? "border-[#FF4F01] bg-[#FF4F01]" : "border-[#dcd6f6]"}`} />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      );
+    case "RANKING":
+      return (
+        <div className="space-y-1">
+          {["First choice", "Second choice", "Third choice"].map((item, i) => (
+            <div key={item} className="flex items-center gap-2 p-1.5 bg-white border border-[#dcd6f6] rounded text-[10px]">
+              <GripVertical className="w-3 h-3 text-[#9b9bab]" />
+              <span className="w-4 h-4 rounded bg-[#FF4F01] text-white text-[9px] flex items-center justify-center font-medium">{i + 1}</span>
+              <span>{item}</span>
+            </div>
+          ))}
+        </div>
+      );
+    case "CONSTANT_SUM":
+      return (
+        <div className="space-y-1.5">
+          <div className="text-[10px] text-[#6b6b7b]">Distribute 100 points</div>
+          {[{ name: "Option A", val: 40 }, { name: "Option B", val: 35 }, { name: "Option C", val: 25 }].map((item) => (
+            <div key={item.name} className="flex items-center gap-2">
+              <span className="text-[10px] w-14">{item.name}</span>
+              <div className="flex-1 h-2 bg-[#dcd6f6] rounded-full overflow-hidden">
+                <div className="h-full bg-[#FF4F01]" style={{ width: `${item.val}%` }} />
+              </div>
+              <span className="text-[10px] font-medium w-6">{item.val}</span>
+            </div>
+          ))}
+        </div>
+      );
+    default:
+      return <div className="text-[10px] text-[#6b6b7b]">Preview</div>;
+  }
+}
+
+// Question Type Card with hover preview
+function QuestionTypeCard({
+  qt,
+  index,
+  onSelect,
+}: {
+  qt: { type: QuestionType; label: string; icon: React.ReactNode; description: string };
+  index: number;
+  onSelect: () => void;
+}) {
+  const [showPreview, setShowPreview] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleMouseEnter = useCallback(() => {
+    timeoutRef.current = setTimeout(() => {
+      setShowPreview(true);
+    }, 600); // 600ms delay before showing preview
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    setShowPreview(false);
+  }, []);
+
+  return (
+    <motion.div
+      className="relative"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <motion.button
+        onClick={onSelect}
+        className="w-full flex flex-col items-center gap-2 p-4 rounded-lg border border-[#dcd6f6] hover:border-[#c9c1ed] hover:bg-[#dcd6f6]/20 text-center"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{
+          delay: index * 0.03,
+          type: "spring",
+          stiffness: 300,
+          damping: 25
+        }}
+        whileHover={{
+          scale: 1.05,
+          y: -4,
+          boxShadow: "0 8px 25px -5px rgba(0, 0, 0, 0.1)",
+          transition: { type: "spring", stiffness: 400, damping: 20 }
+        }}
+        whileTap={{ scale: 0.98 }}
+      >
+        <motion.div
+          className="w-10 h-10 rounded-full bg-[#dcd6f6] flex items-center justify-center"
+          whileHover={{
+            scale: 1.1,
+            rotate: [0, -10, 10, -5, 0],
+            transition: { duration: 0.5 }
+          }}
+        >
+          {qt.icon}
+        </motion.div>
+        <span className="text-sm font-medium">{qt.label}</span>
+        <span className="text-xs text-[#6b6b7b]">{qt.description}</span>
+      </motion.button>
+
+      {/* Preview Popup */}
+      <AnimatePresence>
+        {showPreview && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            className="absolute z-50 left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 p-3 bg-white rounded-lg shadow-xl border border-[#dcd6f6]"
+          >
+            <div className="text-[10px] font-medium text-[#6b6b7b] uppercase tracking-wider mb-2">
+              Preview
+            </div>
+            <QuestionTypePreview type={qt.type} />
+            {/* Arrow */}
+            <div className="absolute left-1/2 -translate-x-1/2 -bottom-2 w-3 h-3 bg-white border-r border-b border-[#dcd6f6] transform rotate-45" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
 
 // Survey Templates
 const surveyTemplates: SurveyTemplate[] = [
@@ -1446,39 +1790,12 @@ export default function NewSurveyPage() {
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                   {questionTypes.map((qt, index) => (
-                    <motion.button
+                    <QuestionTypeCard
                       key={qt.type}
-                      onClick={() => addQuestion(qt.type)}
-                      className="flex flex-col items-center gap-2 p-4 rounded-lg border border-[#dcd6f6] hover:border-[#c9c1ed] hover:bg-[#dcd6f6]/20 text-center"
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{
-                        delay: index * 0.03,
-                        type: "spring",
-                        stiffness: 300,
-                        damping: 25
-                      }}
-                      whileHover={{
-                        scale: 1.05,
-                        y: -4,
-                        boxShadow: "0 8px 25px -5px rgba(0, 0, 0, 0.1)",
-                        transition: { type: "spring", stiffness: 400, damping: 20 }
-                      }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <motion.div
-                        className="w-10 h-10 rounded-full bg-[#dcd6f6] flex items-center justify-center"
-                        whileHover={{
-                          scale: 1.1,
-                          rotate: [0, -10, 10, -5, 0],
-                          transition: { duration: 0.5 }
-                        }}
-                      >
-                        {qt.icon}
-                      </motion.div>
-                      <span className="text-sm font-medium">{qt.label}</span>
-                      <span className="text-xs text-[#6b6b7b]">{qt.description}</span>
-                    </motion.button>
+                      qt={qt}
+                      index={index}
+                      onSelect={() => addQuestion(qt.type)}
+                    />
                   ))}
                 </div>
               </CardContent>
