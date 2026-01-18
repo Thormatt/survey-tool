@@ -35,6 +35,7 @@ import {
   MessageSquare,
   Puzzle,
   LogOut,
+  Tag,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -160,7 +161,7 @@ export default function DistributePage() {
   const [showEmailPreview, setShowEmailPreview] = useState(false);
 
   // Embed code state
-  const [embedType, setEmbedType] = useState<"iframe" | "popup" | "slidein" | "widget" | "exit-intent">("iframe");
+  const [embedType, setEmbedType] = useState<"iframe" | "popup" | "slidein" | "widget" | "exit-intent" | "gtm">("iframe");
   const [embedWidth, setEmbedWidth] = useState("100%");
   const [embedHeight, setEmbedHeight] = useState("600");
   const [embedBgColor, setEmbedBgColor] = useState("#fbf5ea");
@@ -177,6 +178,11 @@ export default function DistributePage() {
   // Exit intent options
   const [exitIntentDelay, setExitIntentDelay] = useState("5");
   const [exitIntentShowOnce, setExitIntentShowOnce] = useState(true);
+  // GTM options
+  const [gtmTrigger, setGtmTrigger] = useState<"pageview" | "click" | "scroll" | "time" | "exit">("pageview");
+  const [gtmDisplayMode, setGtmDisplayMode] = useState<"popup" | "slidein" | "banner">("popup");
+  const [gtmScrollPercent, setGtmScrollPercent] = useState("50");
+  const [gtmTimeDelay, setGtmTimeDelay] = useState("10");
 
   const updateSurvey = async (updates: Partial<Survey>) => {
     if (!survey) return;
@@ -647,6 +653,225 @@ window.addEventListener('message', function(e) {
   }, 60000);
 })();
 </script>`;
+
+      case "gtm":
+        return `<!-- Google Tag Manager Custom HTML Tag -->
+<!--
+  SETUP INSTRUCTIONS:
+  1. In GTM, create a new Tag → Custom HTML
+  2. Paste this entire code block
+  3. Set your trigger based on the selected option below
+
+  Trigger Type: ${gtmTrigger.toUpperCase()}
+  ${gtmTrigger === "pageview" ? "→ Use: All Pages or specific Page View trigger" : ""}
+  ${gtmTrigger === "click" ? "→ Use: Click trigger on your target element" : ""}
+  ${gtmTrigger === "scroll" ? `→ Use: Scroll Depth trigger at ${gtmScrollPercent}%` : ""}
+  ${gtmTrigger === "time" ? `→ Use: Timer trigger with ${gtmTimeDelay}s interval, limit 1` : ""}
+  ${gtmTrigger === "exit" ? "→ Use: Custom JS variable for exit intent (see below)" : ""}
+-->
+<script>
+(function() {
+  // Configuration
+  var CONFIG = {
+    surveyId: '${params.id}',
+    surveyUrl: '${embedUrl}',
+    displayMode: '${gtmDisplayMode}',
+    accentColor: '${embedAccentColor}',
+    trigger: '${gtmTrigger}',
+    scrollPercent: ${gtmScrollPercent},
+    timeDelay: ${gtmTimeDelay},
+    storageKey: 'gtm_survey_${params.id}'
+  };
+
+  // Check if already shown this session
+  if (sessionStorage.getItem(CONFIG.storageKey)) return;
+
+  // Styles
+  var styles = \`
+    .gtm-survey-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 999999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .gtm-survey-overlay.visible { opacity: 1; }
+    .gtm-survey-modal {
+      background: #fff;
+      border-radius: 16px;
+      max-width: 550px;
+      width: 100%;
+      max-height: 90vh;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3);
+      transform: translateY(20px);
+      transition: transform 0.3s;
+    }
+    .gtm-survey-overlay.visible .gtm-survey-modal { transform: translateY(0); }
+    .gtm-survey-close {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.1);
+      border: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 20px;
+      z-index: 10;
+    }
+    .gtm-survey-close:hover { background: rgba(0,0,0,0.2); }
+    .gtm-survey-iframe { width: 100%; height: 500px; border: none; }
+    .gtm-survey-slidein {
+      position: fixed;
+      ${slideinPosition === 'bottom-left' ? 'left' : 'right'}: 20px;
+      bottom: 20px;
+      width: 380px;
+      max-width: calc(100vw - 40px);
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      z-index: 999999;
+      overflow: hidden;
+      transform: translateY(100%);
+      opacity: 0;
+      transition: transform 0.4s ease, opacity 0.3s;
+    }
+    .gtm-survey-slidein.visible { transform: translateY(0); opacity: 1; }
+    .gtm-survey-banner {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #fff;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+      z-index: 999999;
+      transform: translateY(100%);
+      transition: transform 0.4s ease;
+    }
+    .gtm-survey-banner.visible { transform: translateY(0); }
+    .gtm-survey-banner iframe { width: 100%; height: 400px; border: none; }
+    .gtm-survey-header {
+      background: \${CONFIG.accentColor};
+      color: #fff;
+      padding: 12px 16px;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+  \`;
+
+  // Inject styles
+  var styleEl = document.createElement('style');
+  styleEl.textContent = styles;
+  document.head.appendChild(styleEl);
+
+  function showSurvey() {
+    sessionStorage.setItem(CONFIG.storageKey, 'true');
+
+    if (CONFIG.displayMode === 'popup') {
+      var overlay = document.createElement('div');
+      overlay.className = 'gtm-survey-overlay';
+      overlay.innerHTML = \`
+        <div class="gtm-survey-modal">
+          <button class="gtm-survey-close" onclick="this.closest('.gtm-survey-overlay').remove()">&times;</button>
+          <iframe class="gtm-survey-iframe" src="\${CONFIG.surveyUrl}" allow="clipboard-write"></iframe>
+        </div>
+      \`;
+      document.body.appendChild(overlay);
+      document.body.style.overflow = 'hidden';
+      setTimeout(function() { overlay.classList.add('visible'); }, 10);
+      overlay.onclick = function(e) {
+        if (e.target === overlay) {
+          overlay.remove();
+          document.body.style.overflow = '';
+        }
+      };
+    }
+    else if (CONFIG.displayMode === 'slidein') {
+      var slidein = document.createElement('div');
+      slidein.className = 'gtm-survey-slidein';
+      slidein.innerHTML = \`
+        <div class="gtm-survey-header">
+          <span>Quick Feedback</span>
+          <button onclick="this.closest('.gtm-survey-slidein').remove()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&times;</button>
+        </div>
+        <iframe style="width:100%;height:450px;border:none;" src="\${CONFIG.surveyUrl}" allow="clipboard-write"></iframe>
+      \`;
+      document.body.appendChild(slidein);
+      setTimeout(function() { slidein.classList.add('visible'); }, 10);
+    }
+    else if (CONFIG.displayMode === 'banner') {
+      var banner = document.createElement('div');
+      banner.className = 'gtm-survey-banner';
+      banner.innerHTML = \`
+        <div class="gtm-survey-header">
+          <span>We'd love your feedback!</span>
+          <button onclick="this.closest('.gtm-survey-banner').remove()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&times;</button>
+        </div>
+        <iframe src="\${CONFIG.surveyUrl}" allow="clipboard-write"></iframe>
+      \`;
+      document.body.appendChild(banner);
+      setTimeout(function() { banner.classList.add('visible'); }, 10);
+    }
+
+    // Listen for completion
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'survey:completed') {
+        // Push to dataLayer for GTM tracking
+        window.dataLayer = window.dataLayer || [];
+        window.dataLayer.push({
+          event: 'surveyCompleted',
+          surveyId: CONFIG.surveyId
+        });
+        setTimeout(function() {
+          document.querySelectorAll('.gtm-survey-overlay, .gtm-survey-slidein, .gtm-survey-banner').forEach(function(el) { el.remove(); });
+          document.body.style.overflow = '';
+        }, 2000);
+      }
+    });
+  }
+
+  // Trigger logic
+  ${gtmTrigger === "pageview" ? "// Pageview: Show immediately\n  showSurvey();" : ""}
+  ${gtmTrigger === "click" ? "// Click: This tag should be triggered by GTM Click trigger\n  showSurvey();" : ""}
+  ${gtmTrigger === "scroll" ? `// Scroll: Show at ${gtmScrollPercent}% scroll depth
+  var scrollTriggered = false;
+  window.addEventListener('scroll', function() {
+    if (scrollTriggered) return;
+    var scrollPercent = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;
+    if (scrollPercent >= CONFIG.scrollPercent) {
+      scrollTriggered = true;
+      showSurvey();
+    }
+  });` : ""}
+  ${gtmTrigger === "time" ? `// Time: Show after ${gtmTimeDelay} seconds
+  setTimeout(showSurvey, CONFIG.timeDelay * 1000);` : ""}
+  ${gtmTrigger === "exit" ? `// Exit Intent: Show when mouse leaves viewport
+  var exitTriggered = false;
+  document.addEventListener('mouseout', function(e) {
+    if (exitTriggered) return;
+    if (e.clientY < 10 && !e.relatedTarget) {
+      exitTriggered = true;
+      showSurvey();
+    }
+  });` : ""}
+})();
+</script>
+
+<!--
+  TRACKING: This script automatically pushes a 'surveyCompleted' event
+  to the dataLayer when the survey is submitted. You can create a
+  Custom Event trigger in GTM to track conversions.
+-->`;
 
       default:
         return "";
@@ -1162,6 +1387,7 @@ window.addEventListener('message', function(e) {
                     { id: "slidein", label: "Slide-in", icon: MessageSquare, desc: "Floating feedback button" },
                     { id: "widget", label: "Widget", icon: Puzzle, desc: "JavaScript widget" },
                     { id: "exit-intent", label: "Exit Intent", icon: LogOut, desc: "Show when leaving" },
+                    { id: "gtm", label: "GTM", icon: Tag, desc: "Google Tag Manager" },
                   ].map(({ id, label, icon: Icon, desc }) => (
                     <button
                       key={id}
@@ -1437,6 +1663,107 @@ window.addEventListener('message', function(e) {
                           <span className="text-sm">Show only once per visitor</span>
                         </label>
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {embedType === "gtm" && (
+                  <div className="space-y-4 p-4 bg-[#fbf5ea] rounded-lg">
+                    <p className="text-sm font-medium text-[#1a1a2e]">Google Tag Manager Options</p>
+                    <p className="text-xs text-[#6b6b7b]">
+                      Create a Custom HTML tag in GTM with the generated code. Configure your trigger based on the options below.
+                    </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm text-[#6b6b7b] mb-1 block">Trigger Type</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            { id: "pageview", label: "Page View" },
+                            { id: "click", label: "Click" },
+                            { id: "scroll", label: "Scroll" },
+                            { id: "time", label: "Timer" },
+                            { id: "exit", label: "Exit Intent" },
+                          ].map(({ id, label }) => (
+                            <button
+                              key={id}
+                              onClick={() => setGtmTrigger(id as typeof gtmTrigger)}
+                              className={`px-2.5 py-1 text-xs rounded border transition-all ${
+                                gtmTrigger === id
+                                  ? "bg-[#1a1a2e] text-white border-[#1a1a2e]"
+                                  : "bg-white border-[#dcd6f6] hover:border-[#1a1a2e]"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-sm text-[#6b6b7b] mb-1 block">Display Mode</label>
+                        <div className="flex gap-1.5">
+                          {[
+                            { id: "popup", label: "Popup" },
+                            { id: "slidein", label: "Slide-in" },
+                            { id: "banner", label: "Banner" },
+                          ].map(({ id, label }) => (
+                            <button
+                              key={id}
+                              onClick={() => setGtmDisplayMode(id as typeof gtmDisplayMode)}
+                              className={`flex-1 py-1.5 text-xs rounded border transition-all ${
+                                gtmDisplayMode === id
+                                  ? "bg-[#1a1a2e] text-white border-[#1a1a2e]"
+                                  : "bg-white border-[#dcd6f6] hover:border-[#1a1a2e]"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Conditional options based on trigger type */}
+                    {gtmTrigger === "scroll" && (
+                      <div>
+                        <label className="text-sm text-[#6b6b7b] mb-1 block">Scroll Depth (%)</label>
+                        <Input
+                          value={gtmScrollPercent}
+                          onChange={(e) => setGtmScrollPercent(e.target.value)}
+                          placeholder="50"
+                          type="number"
+                          min="10"
+                          max="100"
+                        />
+                      </div>
+                    )}
+
+                    {gtmTrigger === "time" && (
+                      <div>
+                        <label className="text-sm text-[#6b6b7b] mb-1 block">Delay (seconds)</label>
+                        <Input
+                          value={gtmTimeDelay}
+                          onChange={(e) => setGtmTimeDelay(e.target.value)}
+                          placeholder="10"
+                          type="number"
+                          min="1"
+                        />
+                      </div>
+                    )}
+
+                    <div className="bg-white p-3 rounded border border-[#dcd6f6]">
+                      <p className="text-xs font-medium text-[#1a1a2e] mb-1">GTM Setup Steps:</p>
+                      <ol className="text-xs text-[#6b6b7b] list-decimal list-inside space-y-0.5">
+                        <li>Create a new Tag → Custom HTML</li>
+                        <li>Paste the generated code</li>
+                        <li>
+                          {gtmTrigger === "pageview" && "Add a Page View trigger"}
+                          {gtmTrigger === "click" && "Add a Click trigger on your target element"}
+                          {gtmTrigger === "scroll" && `Add a Scroll Depth trigger at ${gtmScrollPercent}%`}
+                          {gtmTrigger === "time" && `Add a Timer trigger (${gtmTimeDelay}s, limit 1)`}
+                          {gtmTrigger === "exit" && "The exit detection is built-in"}
+                        </li>
+                        <li>Publish your container</li>
+                      </ol>
                     </div>
                   </div>
                 )}
