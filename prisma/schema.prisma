@@ -97,6 +97,10 @@ enum QuestionType {
   HIDDEN          // Hidden field for tracking (not shown to respondent)
   // Display elements
   SECTION_HEADER  // Display-only section break (no input)
+  WELCOME_SCREEN  // Introduction screen with start button
+  END_SCREEN      // Thank you / completion screen
+  STATEMENT       // Display-only text/info (no input required)
+  LEGAL           // Consent/terms acceptance checkbox
 }
 
 // Question - individual questions in a survey

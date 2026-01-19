@@ -1198,7 +1198,6 @@ function QuestionResults({
           question.type === "PHONE" ||
           question.type === "TIME" ||
           question.type === "URL" ||
-          question.type === "FILE_UPLOAD" ||
           question.type === "SIGNATURE") && (
           <div className="space-y-3 max-h-80 overflow-y-auto">
             {question.answers.length === 0 ? (
@@ -1220,6 +1219,67 @@ function QuestionResults({
                   </div>
                 </div>
               ))
+            )}
+          </div>
+        )}
+
+        {/* File Upload responses - With download links */}
+        {question.type === "FILE_UPLOAD" && (
+          <div className="space-y-3 max-h-80 overflow-y-auto">
+            {question.answers.length === 0 ? (
+              <p className="text-[#6b6b7b] text-sm italic text-center py-8">No files uploaded yet</p>
+            ) : (
+              question.answers.map((answer, i) => {
+                const fileData = answer.value as { url?: string; filename?: string; size?: number; type?: string } | string | null;
+                const isObject = typeof fileData === "object" && fileData !== null;
+                const url = isObject ? fileData.url : null;
+                const filename = isObject ? fileData.filename : String(fileData);
+                const size = isObject ? fileData.size : null;
+
+                return (
+                  <div
+                    key={answer.id}
+                    className="p-4 bg-gradient-to-r from-white to-[#fbf5ea] rounded-xl border border-[#dcd6f6] hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-[#FF4F01]/10 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-[#FF4F01]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        {url ? (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#FF4F01] hover:underline font-medium truncate block"
+                          >
+                            {filename}
+                          </a>
+                        ) : (
+                          <p className="text-[#1a1a2e] truncate">{filename}</p>
+                        )}
+                        {size && (
+                          <p className="text-xs text-[#6b6b7b]">
+                            {size < 1024 * 1024
+                              ? `${(size / 1024).toFixed(1)} KB`
+                              : `${(size / (1024 * 1024)).toFixed(1)} MB`}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="w-6 h-6 rounded-full bg-[#dcd6f6] flex items-center justify-center text-xs font-medium">
+                        {i + 1}
+                      </div>
+                      <p className="text-xs text-[#6b6b7b]">
+                        {new Date(answer.response.completedAt).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
         )}

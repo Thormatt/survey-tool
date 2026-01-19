@@ -40,6 +40,12 @@ import {
   SlidersHorizontal,
   ListOrdered,
   PieChart,
+  Play,
+  PartyPopper,
+  FileText,
+  ShieldCheck,
+  Heart,
+  Smile,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -81,7 +87,16 @@ type QuestionType =
   | "LIKERT"
   | "SLIDER"
   | "RANKING"
-  | "CONSTANT_SUM";
+  | "CONSTANT_SUM"
+  | "WELCOME_SCREEN"
+  | "END_SCREEN"
+  | "STATEMENT"
+  | "LEGAL";
+
+// Display style options for rating/scale questions
+type RatingDisplayStyle = "stars" | "hearts" | "emojis" | "thumbs" | "numbers";
+type LikertDisplayStyle = "text" | "emoji" | "colored";
+type ScaleDisplayStyle = "numbers" | "slider" | "colored";
 
 type AccessType = "UNLISTED" | "INVITE_ONLY";
 
@@ -122,6 +137,15 @@ interface Question {
     scale?: string[];
     total?: number;
     imageUrls?: Record<string, string>;
+    // Display style settings
+    displayStyle?: RatingDisplayStyle | LikertDisplayStyle | ScaleDisplayStyle;
+    // Welcome/End screen settings
+    buttonText?: string;
+    redirectUrl?: string;
+    // Legal/consent settings
+    consentText?: string;
+    linkUrl?: string;
+    linkText?: string;
   };
 }
 
@@ -133,7 +157,11 @@ const questionTypes: {
   category?: string;
 }[] = [
   // Display
+  { type: "WELCOME_SCREEN", label: "Welcome Screen", icon: <Play className="w-4 h-4" />, description: "Intro with start button", category: "Display" },
+  { type: "END_SCREEN", label: "End Screen", icon: <PartyPopper className="w-4 h-4" />, description: "Thank you page", category: "Display" },
   { type: "SECTION_HEADER", label: "Section Header", icon: <LayoutList className="w-4 h-4" />, description: "Section break", category: "Display" },
+  { type: "STATEMENT", label: "Statement", icon: <FileText className="w-4 h-4" />, description: "Display info text", category: "Display" },
+  { type: "LEGAL", label: "Legal/Consent", icon: <ShieldCheck className="w-4 h-4" />, description: "Terms acceptance", category: "Display" },
   // Text inputs
   { type: "SHORT_TEXT", label: "Short Text", icon: <Type className="w-4 h-4" />, description: "Single line text", category: "Text" },
   { type: "LONG_TEXT", label: "Long Text", icon: <AlignLeft className="w-4 h-4" />, description: "Multi-line text", category: "Text" },
@@ -409,6 +437,41 @@ function QuestionTypePreview({ type }: { type: QuestionType }) {
               <span className="text-[10px] font-medium w-6">{item.val}</span>
             </div>
           ))}
+        </div>
+      );
+    case "WELCOME_SCREEN":
+      return (
+        <div className="space-y-2 text-center">
+          <p className="font-['Syne'] font-semibold text-sm text-[#1a1a2e]">Welcome!</p>
+          <p className="text-[10px] text-[#6b6b7b]">Introduction text here...</p>
+          <button className="px-3 py-1.5 bg-[#FF4F01] text-white text-[10px] rounded-lg font-medium">
+            Start Survey →
+          </button>
+        </div>
+      );
+    case "END_SCREEN":
+      return (
+        <div className="space-y-2 text-center">
+          <div className="text-2xl">🎉</div>
+          <p className="font-['Syne'] font-semibold text-sm text-[#1a1a2e]">Thank You!</p>
+          <p className="text-[10px] text-[#6b6b7b]">Your response has been recorded.</p>
+        </div>
+      );
+    case "STATEMENT":
+      return (
+        <div className="p-2 bg-[#f5f3ff] rounded-lg border-l-3 border-[#FF4F01]">
+          <p className="text-[10px] text-[#1a1a2e]">This is an informational statement that respondents will read. No input required.</p>
+        </div>
+      );
+    case "LEGAL":
+      return (
+        <div className="space-y-2">
+          <label className="flex items-start gap-2 cursor-pointer">
+            <div className="w-4 h-4 rounded border-2 border-[#FF4F01] bg-[#FF4F01] flex items-center justify-center mt-0.5">
+              <CheckSquare className="w-2.5 h-2.5 text-white" />
+            </div>
+            <span className="text-[10px] text-[#1a1a2e]">I agree to the <span className="text-[#FF4F01] underline">Terms & Conditions</span></span>
+          </label>
         </div>
       );
     default:
@@ -690,10 +753,49 @@ function SortableQuestion({
             )}
 
             {question.type === "RATING" && (
-              <div className="mt-4 flex gap-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Star key={star} className="w-6 h-6 text-[#dcd6f6]" />
-                ))}
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center gap-4 p-3 bg-[#f5f3ff] rounded-lg">
+                  <span className="text-sm font-medium">Style:</span>
+                  <select
+                    value={(question.settings?.displayStyle as RatingDisplayStyle) || "stars"}
+                    onChange={(e) => updateQuestion(question.id, {
+                      settings: { ...question.settings, displayStyle: e.target.value as RatingDisplayStyle }
+                    })}
+                    className="text-sm px-2 py-1 border rounded"
+                  >
+                    <option value="stars">⭐ Stars</option>
+                    <option value="hearts">❤️ Hearts</option>
+                    <option value="emojis">😀 Emojis</option>
+                    <option value="thumbs">👍 Thumbs</option>
+                    <option value="numbers">🔢 Numbers</option>
+                  </select>
+                </div>
+                <div className="flex gap-1">
+                  {(question.settings?.displayStyle || "stars") === "stars" && [1, 2, 3, 4, 5].map((i) => (
+                    <Star key={i} className={`w-6 h-6 ${i <= 4 ? "fill-[#FF4F01] text-[#FF4F01]" : "text-[#dcd6f6]"}`} />
+                  ))}
+                  {question.settings?.displayStyle === "hearts" && [1, 2, 3, 4, 5].map((i) => (
+                    <Heart key={i} className={`w-6 h-6 ${i <= 4 ? "fill-red-500 text-red-500" : "text-[#dcd6f6]"}`} />
+                  ))}
+                  {question.settings?.displayStyle === "emojis" && (
+                    <div className="flex gap-2">
+                      {["😢", "😕", "😐", "🙂", "😄"].map((emoji, i) => (
+                        <span key={i} className={`text-2xl ${i === 3 ? "ring-2 ring-[#FF4F01] rounded-full" : ""}`}>{emoji}</span>
+                      ))}
+                    </div>
+                  )}
+                  {question.settings?.displayStyle === "thumbs" && (
+                    <div className="flex gap-4">
+                      <span className="text-2xl opacity-30">👎</span>
+                      <span className="text-2xl ring-2 ring-[#FF4F01] rounded-full p-1">👍</span>
+                    </div>
+                  )}
+                  {question.settings?.displayStyle === "numbers" && [1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${i === 4 ? "bg-[#FF4F01] text-white" : "bg-[#dcd6f6]"}`}>
+                      {i}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -703,6 +805,116 @@ function SortableQuestion({
                   This section header will display as a visual break in the survey.
                   No response required from respondents.
                 </p>
+              </div>
+            )}
+
+            {/* Welcome Screen editor */}
+            {question.type === "WELCOME_SCREEN" && (
+              <div className="mt-4 space-y-3">
+                <div className="p-4 bg-gradient-to-br from-[#f5f3ff] to-[#fff8f0] rounded-lg text-center">
+                  <Play className="w-8 h-8 mx-auto mb-2 text-[#FF4F01]" />
+                  <p className="text-sm text-[#6b6b7b]">This will be shown as the first screen of your survey.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">Button text:</label>
+                  <Input
+                    value={question.settings?.buttonText || "Start Survey"}
+                    onChange={(e) => updateQuestion(question.id, {
+                      settings: { ...question.settings, buttonText: e.target.value }
+                    })}
+                    className="flex-1 h-8 text-sm"
+                    placeholder="Start Survey"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* End Screen editor */}
+            {question.type === "END_SCREEN" && (
+              <div className="mt-4 space-y-3">
+                <div className="p-4 bg-gradient-to-br from-green-50 to-[#f5f3ff] rounded-lg text-center">
+                  <PartyPopper className="w-8 h-8 mx-auto mb-2 text-green-600" />
+                  <p className="text-sm text-[#6b6b7b]">This will be shown after the survey is completed.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">Button text:</label>
+                  <Input
+                    value={question.settings?.buttonText || ""}
+                    onChange={(e) => updateQuestion(question.id, {
+                      settings: { ...question.settings, buttonText: e.target.value }
+                    })}
+                    className="flex-1 h-8 text-sm"
+                    placeholder="Optional button (e.g., Visit Website)"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">Redirect URL:</label>
+                  <Input
+                    value={question.settings?.redirectUrl || ""}
+                    onChange={(e) => updateQuestion(question.id, {
+                      settings: { ...question.settings, redirectUrl: e.target.value }
+                    })}
+                    className="flex-1 h-8 text-sm"
+                    placeholder="https://example.com (optional)"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Statement editor */}
+            {question.type === "STATEMENT" && (
+              <div className="mt-4 p-4 border-l-4 border-blue-400 bg-blue-50 rounded-r-lg">
+                <p className="text-sm text-[#6b6b7b] italic">
+                  This statement will be displayed to respondents. No input required.
+                  Use the title and description fields above to add your content.
+                </p>
+              </div>
+            )}
+
+            {/* Legal/Consent editor */}
+            {question.type === "LEGAL" && (
+              <div className="mt-4 space-y-3">
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <ShieldCheck className="w-5 h-5 text-amber-600 mt-0.5" />
+                    <p className="text-sm text-amber-800">
+                      Respondents must check this box to continue. Use for terms, privacy policies, or consent.
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Consent text:</label>
+                  <Input
+                    value={question.settings?.consentText || "I agree to the Terms and Conditions"}
+                    onChange={(e) => updateQuestion(question.id, {
+                      settings: { ...question.settings, consentText: e.target.value }
+                    })}
+                    className="h-8 text-sm"
+                    placeholder="I agree to the Terms and Conditions"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">Link text:</label>
+                  <Input
+                    value={question.settings?.linkText || ""}
+                    onChange={(e) => updateQuestion(question.id, {
+                      settings: { ...question.settings, linkText: e.target.value }
+                    })}
+                    className="flex-1 h-8 text-sm"
+                    placeholder="Terms and Conditions (optional)"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">Link URL:</label>
+                  <Input
+                    value={question.settings?.linkUrl || ""}
+                    onChange={(e) => updateQuestion(question.id, {
+                      settings: { ...question.settings, linkUrl: e.target.value }
+                    })}
+                    className="flex-1 h-8 text-sm"
+                    placeholder="https://example.com/terms (optional)"
+                  />
+                </div>
               </div>
             )}
 
@@ -900,32 +1112,70 @@ function SortableQuestion({
             {/* Likert preview */}
             {question.type === "LIKERT" && (
               <div className="mt-4 space-y-3">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Scale options:</label>
-                  {(question.settings?.scale || ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"]).map((item, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="w-6 text-center text-xs text-[#6b6b7b]">{i + 1}</span>
-                      <Input
-                        value={item}
-                        onChange={(e) => {
-                          const newScale = [...(question.settings?.scale || [])];
-                          newScale[i] = e.target.value;
-                          updateQuestion(question.id, {
-                            settings: { ...question.settings, scale: newScale }
-                          });
-                        }}
-                        className="flex-1 h-8 text-sm"
-                      />
-                    </div>
-                  ))}
+                <div className="flex items-center gap-4 p-3 bg-[#f5f3ff] rounded-lg">
+                  <span className="text-sm font-medium">Style:</span>
+                  <select
+                    value={(question.settings?.displayStyle as LikertDisplayStyle) || "text"}
+                    onChange={(e) => updateQuestion(question.id, {
+                      settings: { ...question.settings, displayStyle: e.target.value as LikertDisplayStyle }
+                    })}
+                    className="text-sm px-2 py-1 border rounded"
+                  >
+                    <option value="text">📝 Text buttons</option>
+                    <option value="emoji">😀 Emoji scale</option>
+                    <option value="colored">🌈 Colored blocks</option>
+                  </select>
                 </div>
+                {(question.settings?.displayStyle || "text") === "text" && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Scale options:</label>
+                    {(question.settings?.scale || ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"]).map((item, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="w-6 text-center text-xs text-[#6b6b7b]">{i + 1}</span>
+                        <Input
+                          value={item}
+                          onChange={(e) => {
+                            const newScale = [...(question.settings?.scale || [])];
+                            newScale[i] = e.target.value;
+                            updateQuestion(question.id, {
+                              settings: { ...question.settings, scale: newScale }
+                            });
+                          }}
+                          className="flex-1 h-8 text-sm"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="flex justify-between gap-2 p-3 bg-white rounded-lg border border-[#dcd6f6]">
-                  {(question.settings?.scale || ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"]).map((label, i) => (
-                    <div key={i} className="flex flex-col items-center gap-1 flex-1">
-                      <div className="w-4 h-4 rounded-full border-2 border-[#dcd6f6]" />
-                      <span className="text-xs text-[#6b6b7b] text-center">{label}</span>
-                    </div>
-                  ))}
+                  {(question.settings?.displayStyle || "text") === "text" &&
+                    (question.settings?.scale || ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"]).map((label, i) => (
+                      <div key={i} className="flex flex-col items-center gap-1 flex-1">
+                        <div className="w-4 h-4 rounded-full border-2 border-[#dcd6f6]" />
+                        <span className="text-xs text-[#6b6b7b] text-center">{label}</span>
+                      </div>
+                    ))
+                  }
+                  {question.settings?.displayStyle === "emoji" &&
+                    ["😠", "😕", "😐", "🙂", "😍"].map((emoji, i) => (
+                      <div key={i} className={`w-10 h-10 rounded-full flex items-center justify-center text-xl ${i === 3 ? "bg-[#FF4F01]/20 ring-2 ring-[#FF4F01]" : "bg-[#dcd6f6]/30"}`}>
+                        {emoji}
+                      </div>
+                    ))
+                  }
+                  {question.settings?.displayStyle === "colored" &&
+                    [
+                      { color: "bg-red-400", label: "1" },
+                      { color: "bg-orange-400", label: "2" },
+                      { color: "bg-yellow-400", label: "3" },
+                      { color: "bg-lime-400", label: "4" },
+                      { color: "bg-green-400", label: "5" },
+                    ].map((item, i) => (
+                      <div key={i} className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-medium ${item.color} ${i === 3 ? "ring-2 ring-offset-2 ring-[#1a1a2e]" : ""}`}>
+                        {item.label}
+                      </div>
+                    ))
+                  }
                 </div>
               </div>
             )}
@@ -1462,18 +1712,33 @@ export default function EditSurveyPage() {
         settings = { minLabel: "Not at all likely", maxLabel: "Extremely likely" };
         break;
       case "LIKERT":
-        settings = { scale: ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] };
+        settings = { scale: ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"], displayStyle: "text" };
         break;
       case "SLIDER":
         settings = { min: 0, max: 100, step: 1 };
         break;
+      case "RATING":
+        settings = { displayStyle: "stars" };
+        break;
+      case "WELCOME_SCREEN":
+        settings = { buttonText: "Start Survey" };
+        break;
+      case "END_SCREEN":
+        settings = { buttonText: "", redirectUrl: "" };
+        break;
+      case "LEGAL":
+        settings = { consentText: "I agree to the Terms and Conditions", linkText: "", linkUrl: "" };
+        break;
     }
+
+    // Determine if required should be false by default
+    const noInputTypes = ["SECTION_HEADER", "WELCOME_SCREEN", "END_SCREEN", "STATEMENT"];
 
     const newQuestion: Question = {
       id: crypto.randomUUID(),
       type,
       title: "",
-      required: type === "SECTION_HEADER" ? false : false,
+      required: noInputTypes.includes(type) ? false : type === "LEGAL" ? true : false,
       options,
       settings,
     };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { useUser, SignInButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,15 @@ import {
   Upload,
   PenLine,
   EyeOff,
+  Star,
+  Heart,
+  ThumbsUp,
+  ThumbsDown,
+  Play,
+  PartyPopper,
+  FileText,
+  ShieldCheck,
+  ExternalLink,
 } from "lucide-react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
@@ -123,6 +132,11 @@ interface SkipLogic {
   logic: "all" | "any";
 }
 
+// Display style types
+type RatingDisplayStyle = "stars" | "hearts" | "emojis" | "thumbs" | "numbers";
+type LikertDisplayStyle = "text" | "emoji" | "colored";
+type ScaleDisplayStyle = "numbers" | "slider" | "colored";
+
 interface Question {
   id: string;
   type: string;
@@ -156,6 +170,15 @@ interface Question {
     includeCountry?: boolean;
     // Hidden field settings
     defaultValue?: string;
+    // Display style for rating/likert/scale
+    displayStyle?: RatingDisplayStyle | LikertDisplayStyle | ScaleDisplayStyle;
+    // Welcome/End screen settings
+    buttonText?: string;
+    redirectUrl?: string;
+    // Legal/Consent settings
+    consentText?: string;
+    linkUrl?: string;
+    linkText?: string;
   };
 }
 
@@ -215,6 +238,7 @@ export default function SurveyResponsePage() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<{ type: string; message: string } | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [respondentInfo, setRespondentInfo] = useState({ email: "", name: "" });
 
@@ -278,11 +302,13 @@ export default function SurveyResponsePage() {
     }
   }, [currentIndex]);
 
-  // Count only answerable questions (exclude SECTION_HEADER)
-  const answerableQuestions = survey?.questions.filter(q => q.type !== "SECTION_HEADER") || [];
+  // Display-only question types that don't require answers
+  const displayOnlyTypes = ["SECTION_HEADER", "WELCOME_SCREEN", "END_SCREEN", "STATEMENT"];
+  // Count only answerable questions (exclude display-only types)
+  const answerableQuestions = survey?.questions.filter(q => !displayOnlyTypes.includes(q.type)) || [];
   const totalSteps = survey ? answerableQuestions.length + (survey.isAnonymous ? 0 : 1) : 0;
-  // Calculate current step excluding SECTION_HEADER questions already passed
-  const questionsBeforeCurrent = survey?.questions.slice(0, Math.max(0, currentIndex + 1)).filter(q => q.type !== "SECTION_HEADER") || [];
+  // Calculate current step excluding display-only questions already passed
+  const questionsBeforeCurrent = survey?.questions.slice(0, Math.max(0, currentIndex + 1)).filter(q => !displayOnlyTypes.includes(q.type)) || [];
   const currentStep = survey?.isAnonymous ? questionsBeforeCurrent.length : questionsBeforeCurrent.length + 1;
   const progress = totalSteps > 0 ? Math.max(0, (currentStep / totalSteps) * 100) : 0;
 
@@ -314,8 +340,20 @@ export default function SurveyResponsePage() {
 
     // Question screens
     if (currentIndex >= 0 && currentQuestion) {
-      // SECTION_HEADER and HIDDEN always allow proceeding (no answer needed)
-      if (currentQuestion.type === "SECTION_HEADER" || currentQuestion.type === "HIDDEN") return true;
+      // Display-only types always allow proceeding (no answer needed)
+      if (
+        currentQuestion.type === "SECTION_HEADER" ||
+        currentQuestion.type === "HIDDEN" ||
+        currentQuestion.type === "WELCOME_SCREEN" ||
+        currentQuestion.type === "END_SCREEN" ||
+        currentQuestion.type === "STATEMENT"
+      ) return true;
+
+      // LEGAL requires acceptance if required
+      if (currentQuestion.type === "LEGAL") {
+        if (!currentQuestion.required) return true;
+        return answers[currentQuestion.id] === true;
+      }
 
       // ADDRESS validation - need at least a street address if required
       if (currentQuestion.type === "ADDRESS" && currentQuestion.required) {
@@ -980,83 +1018,275 @@ export default function SurveyResponsePage() {
               )}
 
               {/* Rating */}
-              {currentQuestion.type === "RATING" && (
-                <motion.div
-                  className="flex gap-3 flex-wrap"
-                  variants={containerVariants}
-                  initial="initial"
-                  animate="animate"
-                >
-                  {[1, 2, 3, 4, 5].map((rating) => {
-                    const isSelected = answers[currentQuestion.id] === rating;
-                    return (
-                      <motion.button
-                        key={rating}
-                        variants={itemVariants}
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.95 }}
-                        animate={isSelected ? { scale: 1.15, backgroundColor: "#FF4F01" } : { scale: 1 }}
-                        onClick={() => {
-                          updateAnswer(currentQuestion.id, rating);
-                          setTimeout(goNext, 400);
-                        }}
-                        className={`w-16 h-16 rounded-xl border-2 font-bold text-xl ${
-                          isSelected
-                            ? "border-[#FF4F01] bg-[#FF4F01] text-white"
-                            : "border-white/20 text-white/60"
-                        }`}
-                      >
-                        {rating}
-                      </motion.button>
-                    );
-                  })}
-                </motion.div>
-              )}
+              {currentQuestion.type === "RATING" && (() => {
+                const displayStyle = (currentQuestion.settings?.displayStyle as RatingDisplayStyle) || "numbers";
+                const selectedRating = answers[currentQuestion.id] as number;
 
-              {/* Scale */}
-              {currentQuestion.type === "SCALE" && (
-                <div>
+                // Render functions for different styles
+                const renderRatingIcon = (rating: number, isSelected: boolean, isHovered: boolean) => {
+                  const filled = isSelected || (selectedRating !== undefined && rating <= selectedRating);
+
+                  switch (displayStyle) {
+                    case "stars":
+                      return (
+                        <Star
+                          className={`w-10 h-10 transition-all ${
+                            filled ? "fill-yellow-400 text-yellow-400" : "text-white/30"
+                          } ${isHovered && !filled ? "text-yellow-400/50" : ""}`}
+                        />
+                      );
+                    case "hearts":
+                      return (
+                        <Heart
+                          className={`w-10 h-10 transition-all ${
+                            filled ? "fill-red-500 text-red-500" : "text-white/30"
+                          } ${isHovered && !filled ? "text-red-500/50" : ""}`}
+                        />
+                      );
+                    case "emojis":
+                      const emojis = ["😞", "😕", "😐", "🙂", "😄"];
+                      return (
+                        <span className={`text-4xl transition-all ${filled ? "scale-110" : "grayscale opacity-50"}`}>
+                          {emojis[rating - 1]}
+                        </span>
+                      );
+                    case "thumbs":
+                      // Thumbs: 1-2 = thumbs down, 3 = neutral, 4-5 = thumbs up
+                      if (rating <= 2) {
+                        return (
+                          <ThumbsDown
+                            className={`w-10 h-10 transition-all ${
+                              filled ? "fill-red-500 text-red-500" : "text-white/30"
+                            }`}
+                          />
+                        );
+                      } else if (rating === 3) {
+                        return (
+                          <span className={`text-3xl ${filled ? "" : "grayscale opacity-50"}`}>😐</span>
+                        );
+                      } else {
+                        return (
+                          <ThumbsUp
+                            className={`w-10 h-10 transition-all ${
+                              filled ? "fill-green-500 text-green-500" : "text-white/30"
+                            }`}
+                          />
+                        );
+                      }
+                    case "numbers":
+                    default:
+                      return (
+                        <span className="text-xl font-bold">{rating}</span>
+                      );
+                  }
+                };
+
+                return (
                   <motion.div
-                    className="flex gap-2 flex-wrap"
+                    className="flex gap-3 flex-wrap justify-center"
                     variants={containerVariants}
                     initial="initial"
                     animate="animate"
                   >
-                    {Array.from({ length: 10 }, (_, i) => i + 1).map((value) => {
-                      const isSelected = answers[currentQuestion.id] === value;
+                    {[1, 2, 3, 4, 5].map((rating) => {
+                      const isSelected = selectedRating === rating;
+                      const [isHovered, setIsHovered] = React.useState(false);
+
                       return (
                         <motion.button
-                          key={value}
+                          key={rating}
                           variants={itemVariants}
                           whileHover={{ scale: 1.1 }}
                           whileTap={{ scale: 0.95 }}
-                          animate={isSelected ? { scale: 1.15, backgroundColor: "#FF4F01" } : { scale: 1 }}
+                          onHoverStart={() => setIsHovered(true)}
+                          onHoverEnd={() => setIsHovered(false)}
                           onClick={() => {
-                            updateAnswer(currentQuestion.id, value);
+                            updateAnswer(currentQuestion.id, rating);
                             setTimeout(goNext, 400);
                           }}
-                          className={`w-12 h-12 rounded-xl border-2 font-bold ${
-                            isSelected
-                              ? "border-[#FF4F01] bg-[#FF4F01] text-white"
-                              : "border-white/20 text-white/60"
+                          className={`w-16 h-16 rounded-xl border-2 flex items-center justify-center transition-all ${
+                            displayStyle === "numbers"
+                              ? isSelected
+                                ? "border-[#FF4F01] bg-[#FF4F01] text-white"
+                                : "border-white/20 text-white/60"
+                              : isSelected
+                                ? "border-[#FF4F01] bg-[#FF4F01]/10"
+                                : "border-white/10 bg-white/5"
                           }`}
                         >
-                          {value}
+                          {renderRatingIcon(rating, isSelected, isHovered)}
                         </motion.button>
                       );
                     })}
                   </motion.div>
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.5 }}
-                    className="flex justify-between text-white/70 text-sm mt-4 px-1"
-                  >
-                    <span>Not at all</span>
-                    <span>Extremely</span>
-                  </motion.div>
-                </div>
-              )}
+                );
+              })()}
+
+              {/* Scale */}
+              {currentQuestion.type === "SCALE" && (() => {
+                const displayStyle = (currentQuestion.settings?.displayStyle as ScaleDisplayStyle) || "numbers";
+                const min = currentQuestion.settings?.scaleMin || 1;
+                const max = currentQuestion.settings?.scaleMax || 10;
+                const scaleValues = Array.from({ length: max - min + 1 }, (_, i) => min + i);
+
+                // Colored gradient for colored style
+                const getColorClass = (value: number) => {
+                  const normalizedValue = (value - min) / (max - min);
+                  if (normalizedValue <= 0.2) return "bg-red-500/20 border-red-500 text-red-400";
+                  if (normalizedValue <= 0.4) return "bg-orange-500/20 border-orange-500 text-orange-400";
+                  if (normalizedValue <= 0.6) return "bg-yellow-500/20 border-yellow-500 text-yellow-400";
+                  if (normalizedValue <= 0.8) return "bg-lime-500/20 border-lime-500 text-lime-400";
+                  return "bg-green-500/20 border-green-500 text-green-400";
+                };
+
+                if (displayStyle === "slider") {
+                  return (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="space-y-6"
+                    >
+                      <div className="relative">
+                        <input
+                          type="range"
+                          aria-label={`${currentQuestion.title} slider`}
+                          min={min}
+                          max={max}
+                          step={1}
+                          value={(answers[currentQuestion.id] as number) || min}
+                          onChange={(e) => updateAnswer(currentQuestion.id, Number(e.target.value))}
+                          className="w-full h-3 bg-white/10 rounded-full appearance-none cursor-pointer
+                            [&::-webkit-slider-thumb]:appearance-none
+                            [&::-webkit-slider-thumb]:w-8
+                            [&::-webkit-slider-thumb]:h-8
+                            [&::-webkit-slider-thumb]:rounded-full
+                            [&::-webkit-slider-thumb]:bg-[#FF4F01]
+                            [&::-webkit-slider-thumb]:cursor-pointer
+                            [&::-webkit-slider-thumb]:shadow-lg
+                            [&::-webkit-slider-thumb]:border-4
+                            [&::-webkit-slider-thumb]:border-white/20
+                            [&::-moz-range-thumb]:w-8
+                            [&::-moz-range-thumb]:h-8
+                            [&::-moz-range-thumb]:rounded-full
+                            [&::-moz-range-thumb]:bg-[#FF4F01]
+                            [&::-moz-range-thumb]:cursor-pointer
+                            [&::-moz-range-thumb]:border-4
+                            [&::-moz-range-thumb]:border-white/20"
+                        />
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-white/70 text-sm">{min}</span>
+                        <span className="text-white text-4xl font-bold">
+                          {answers[currentQuestion.id] !== undefined
+                            ? String(answers[currentQuestion.id])
+                            : min}
+                        </span>
+                        <span className="text-white/70 text-sm">{max}</span>
+                      </div>
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.3 }}
+                        className="flex justify-between text-white/70 text-sm px-1"
+                      >
+                        <span>{currentQuestion.settings?.minLabel || "Not at all"}</span>
+                        <span>{currentQuestion.settings?.maxLabel || "Extremely"}</span>
+                      </motion.div>
+                    </motion.div>
+                  );
+                }
+
+                if (displayStyle === "colored") {
+                  return (
+                    <div>
+                      <motion.div
+                        className="flex gap-2 flex-wrap justify-center"
+                        variants={containerVariants}
+                        initial="initial"
+                        animate="animate"
+                      >
+                        {scaleValues.map((value) => {
+                          const isSelected = answers[currentQuestion.id] === value;
+                          const colorClass = getColorClass(value);
+                          return (
+                            <motion.button
+                              key={value}
+                              variants={itemVariants}
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => {
+                                updateAnswer(currentQuestion.id, value);
+                                setTimeout(goNext, 400);
+                              }}
+                              className={`w-12 h-12 rounded-xl border-2 font-bold transition-all ${
+                                isSelected
+                                  ? colorClass
+                                  : "border-white/20 text-white/60"
+                              }`}
+                            >
+                              {value}
+                            </motion.button>
+                          );
+                        })}
+                      </motion.div>
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.5 }}
+                        className="flex justify-between text-white/70 text-sm mt-4 px-1"
+                      >
+                        <span>{currentQuestion.settings?.minLabel || "Not at all"}</span>
+                        <span>{currentQuestion.settings?.maxLabel || "Extremely"}</span>
+                      </motion.div>
+                    </div>
+                  );
+                }
+
+                // Default numbers style
+                return (
+                  <div>
+                    <motion.div
+                      className="flex gap-2 flex-wrap"
+                      variants={containerVariants}
+                      initial="initial"
+                      animate="animate"
+                    >
+                      {scaleValues.map((value) => {
+                        const isSelected = answers[currentQuestion.id] === value;
+                        return (
+                          <motion.button
+                            key={value}
+                            variants={itemVariants}
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.95 }}
+                            animate={isSelected ? { scale: 1.15, backgroundColor: "#FF4F01" } : { scale: 1 }}
+                            onClick={() => {
+                              updateAnswer(currentQuestion.id, value);
+                              setTimeout(goNext, 400);
+                            }}
+                            className={`w-12 h-12 rounded-xl border-2 font-bold ${
+                              isSelected
+                                ? "border-[#FF4F01] bg-[#FF4F01] text-white"
+                                : "border-white/20 text-white/60"
+                            }`}
+                          >
+                            {value}
+                          </motion.button>
+                        );
+                      })}
+                    </motion.div>
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.5 }}
+                      className="flex justify-between text-white/70 text-sm mt-4 px-1"
+                    >
+                      <span>{currentQuestion.settings?.minLabel || "Not at all"}</span>
+                      <span>{currentQuestion.settings?.maxLabel || "Extremely"}</span>
+                    </motion.div>
+                  </div>
+                );
+              })()}
 
               {/* Section Header - Display Only */}
               {currentQuestion.type === "SECTION_HEADER" && (
@@ -1290,54 +1520,145 @@ export default function SurveyResponsePage() {
               )}
 
               {/* Likert Scale */}
-              {currentQuestion.type === "LIKERT" && (
-                <motion.div
-                  className="space-y-3"
-                  variants={containerVariants}
-                  initial="initial"
-                  animate="animate"
-                >
-                  {(currentQuestion.settings?.scale || [
-                    "Strongly Disagree",
-                    "Disagree",
-                    "Neutral",
-                    "Agree",
-                    "Strongly Agree",
-                  ]).map((option, idx) => {
-                    const isSelected = answers[currentQuestion.id] === option;
-                    return (
-                      <motion.button
-                        key={option}
-                        variants={itemVariants}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => {
-                          updateAnswer(currentQuestion.id, option);
-                          setTimeout(goNext, 400);
-                        }}
-                        className={`w-full p-5 rounded-xl border-2 text-left flex items-center gap-4 group ${
-                          isSelected
-                            ? "border-[#FF4F01] bg-[#FF4F01]/10"
-                            : "border-white/10"
-                        }`}
-                      >
-                        <span
-                          className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
+              {currentQuestion.type === "LIKERT" && (() => {
+                const displayStyle = (currentQuestion.settings?.displayStyle as LikertDisplayStyle) || "text";
+                const scale = currentQuestion.settings?.scale || [
+                  "Strongly Disagree",
+                  "Disagree",
+                  "Neutral",
+                  "Agree",
+                  "Strongly Agree",
+                ];
+
+                // Emoji mapping for likert scale
+                const emojiScale = ["😠", "😕", "😐", "🙂", "😄"];
+                // Color mapping for colored style
+                const colorScale = [
+                  "bg-red-500/20 border-red-500 text-red-400",
+                  "bg-orange-500/20 border-orange-500 text-orange-400",
+                  "bg-yellow-500/20 border-yellow-500 text-yellow-400",
+                  "bg-lime-500/20 border-lime-500 text-lime-400",
+                  "bg-green-500/20 border-green-500 text-green-400",
+                ];
+
+                if (displayStyle === "emoji") {
+                  return (
+                    <motion.div
+                      className="flex gap-4 flex-wrap justify-center"
+                      variants={containerVariants}
+                      initial="initial"
+                      animate="animate"
+                    >
+                      {scale.map((option, idx) => {
+                        const isSelected = answers[currentQuestion.id] === option;
+                        return (
+                          <motion.button
+                            key={option}
+                            variants={itemVariants}
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => {
+                              updateAnswer(currentQuestion.id, option);
+                              setTimeout(goNext, 400);
+                            }}
+                            className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
+                              isSelected
+                                ? "border-[#FF4F01] bg-[#FF4F01]/10"
+                                : "border-white/10 bg-white/5"
+                            }`}
+                          >
+                            <span className={`text-4xl transition-transform ${isSelected ? "scale-110" : ""}`}>
+                              {emojiScale[idx] || "😐"}
+                            </span>
+                            <span className={`text-xs ${isSelected ? "text-white" : "text-white/60"}`}>
+                              {option}
+                            </span>
+                          </motion.button>
+                        );
+                      })}
+                    </motion.div>
+                  );
+                }
+
+                if (displayStyle === "colored") {
+                  return (
+                    <motion.div
+                      className="flex gap-2 flex-wrap justify-center"
+                      variants={containerVariants}
+                      initial="initial"
+                      animate="animate"
+                    >
+                      {scale.map((option, idx) => {
+                        const isSelected = answers[currentQuestion.id] === option;
+                        const colorClass = colorScale[idx] || colorScale[2];
+                        return (
+                          <motion.button
+                            key={option}
+                            variants={itemVariants}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => {
+                              updateAnswer(currentQuestion.id, option);
+                              setTimeout(goNext, 400);
+                            }}
+                            className={`px-6 py-4 rounded-xl border-2 transition-all ${
+                              isSelected
+                                ? colorClass
+                                : "border-white/10 bg-white/5 text-white/70"
+                            }`}
+                          >
+                            <span className="text-sm font-medium">{option}</span>
+                          </motion.button>
+                        );
+                      })}
+                    </motion.div>
+                  );
+                }
+
+                // Default text style
+                return (
+                  <motion.div
+                    className="space-y-3"
+                    variants={containerVariants}
+                    initial="initial"
+                    animate="animate"
+                  >
+                    {scale.map((option, idx) => {
+                      const isSelected = answers[currentQuestion.id] === option;
+                      return (
+                        <motion.button
+                          key={option}
+                          variants={itemVariants}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => {
+                            updateAnswer(currentQuestion.id, option);
+                            setTimeout(goNext, 400);
+                          }}
+                          className={`w-full p-5 rounded-xl border-2 text-left flex items-center gap-4 group ${
                             isSelected
-                              ? "bg-[#FF4F01] text-white"
-                              : "bg-white/10 text-white/60"
+                              ? "border-[#FF4F01] bg-[#FF4F01]/10"
+                              : "border-white/10"
                           }`}
                         >
-                          {isSelected ? <Check className="w-4 h-4" /> : idx + 1}
-                        </span>
-                        <span className={`text-lg ${isSelected ? "text-white" : "text-white/80"}`}>
-                          {option}
-                        </span>
-                      </motion.button>
-                    );
-                  })}
-                </motion.div>
-              )}
+                          <span
+                            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
+                              isSelected
+                                ? "bg-[#FF4F01] text-white"
+                                : "bg-white/10 text-white/60"
+                            }`}
+                          >
+                            {isSelected ? <Check className="w-4 h-4" /> : idx + 1}
+                          </span>
+                          <span className={`text-lg ${isSelected ? "text-white" : "text-white/80"}`}>
+                            {option}
+                          </span>
+                        </motion.button>
+                      );
+                    })}
+                  </motion.div>
+                );
+              })()}
 
               {/* Slider */}
               {currentQuestion.type === "SLIDER" && (
@@ -1675,26 +1996,80 @@ export default function SurveyResponsePage() {
               {currentQuestion.type === "FILE_UPLOAD" && (
                 <motion.div variants={itemVariants}>
                   <label className="block">
-                    <div className="border-2 border-dashed border-white/20 rounded-xl p-10 text-center hover:border-[#FF4F01] hover:bg-white/5 transition-colors cursor-pointer">
-                      <Upload className="w-12 h-12 text-white/50 mx-auto mb-4" />
-                      <p className="text-white/70 mb-2">Click to upload or drag and drop</p>
-                      <p className="text-white/50 text-sm">
-                        {currentQuestion.settings?.allowedTypes?.join(", ") || "Any file type"}
-                        {currentQuestion.settings?.maxSizeMB && ` • Max ${currentQuestion.settings.maxSizeMB}MB`}
-                      </p>
-                      {(answers[currentQuestion.id] as string) && (
-                        <div className="mt-4 p-3 bg-[#FF4F01]/20 rounded-lg">
-                          <p className="text-white text-sm">File selected: {answers[currentQuestion.id] as string}</p>
-                        </div>
+                    <div className={`border-2 border-dashed rounded-xl p-10 text-center transition-colors cursor-pointer ${
+                      uploading
+                        ? "border-[#FF4F01] bg-[#FF4F01]/10"
+                        : "border-white/20 hover:border-[#FF4F01] hover:bg-white/5"
+                    }`}>
+                      {uploading ? (
+                        <>
+                          <Loader2 className="w-12 h-12 text-[#FF4F01] mx-auto mb-4 animate-spin" />
+                          <p className="text-white/70 mb-2">Uploading...</p>
+                        </>
+                      ) : (answers[currentQuestion.id] as { url?: string; filename?: string })?.url ? (
+                        <>
+                          <Check className="w-12 h-12 text-green-400 mx-auto mb-4" />
+                          <p className="text-white mb-2">File uploaded successfully!</p>
+                          <p className="text-white/70 text-sm">
+                            {(answers[currentQuestion.id] as { filename?: string })?.filename}
+                          </p>
+                          <p className="text-[#FF4F01] text-sm mt-2">Click to replace</p>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-12 h-12 text-white/50 mx-auto mb-4" />
+                          <p className="text-white/70 mb-2">Click to upload or drag and drop</p>
+                          <p className="text-white/50 text-sm">
+                            {currentQuestion.settings?.allowedTypes?.join(", ") || "Any file type"}
+                            {currentQuestion.settings?.maxSizeMB && ` • Max ${currentQuestion.settings.maxSizeMB}MB`}
+                          </p>
+                        </>
                       )}
                     </div>
                     <input
                       type="file"
                       accept={currentQuestion.settings?.allowedTypes?.join(",")}
-                      onChange={(e) => {
+                      disabled={uploading}
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
-                        if (file) {
-                          updateAnswer(currentQuestion.id, file.name);
+                        if (!file) return;
+
+                        // Check file size
+                        const maxSizeMB = currentQuestion.settings?.maxSizeMB || 10;
+                        if (file.size > maxSizeMB * 1024 * 1024) {
+                          setError(`File too large. Maximum size is ${maxSizeMB}MB.`);
+                          return;
+                        }
+
+                        setUploading(true);
+                        setError(null);
+
+                        try {
+                          const formData = new FormData();
+                          formData.append("file", file);
+                          formData.append("surveyId", survey?.id || "");
+
+                          const response = await fetch("/api/upload", {
+                            method: "POST",
+                            body: formData,
+                          });
+
+                          if (!response.ok) {
+                            const data = await response.json();
+                            throw new Error(data.error || "Upload failed");
+                          }
+
+                          const data = await response.json();
+                          updateAnswer(currentQuestion.id, {
+                            url: data.url,
+                            filename: data.filename,
+                            size: data.size,
+                            type: data.type,
+                          });
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : "Failed to upload file");
+                        } finally {
+                          setUploading(false);
                         }
                       }}
                       className="sr-only"
@@ -1741,6 +2116,137 @@ export default function SurveyResponsePage() {
                 <motion.div variants={itemVariants} className="bg-white/5 border border-white/10 rounded-xl p-6 text-center">
                   <EyeOff className="w-8 h-8 text-white/30 mx-auto mb-2" />
                   <p className="text-white/50 text-sm">This is a hidden tracking field</p>
+                </motion.div>
+              )}
+
+              {/* Welcome Screen */}
+              {currentQuestion.type === "WELCOME_SCREEN" && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-center py-8"
+                >
+                  <div className="w-20 h-20 rounded-2xl bg-[#FF4F01] flex items-center justify-center mx-auto mb-8">
+                    <Play className="w-10 h-10 text-white" />
+                  </div>
+                  <p className="text-white/70 text-lg mb-8">
+                    {currentQuestion.description || "Welcome! Click below to begin."}
+                  </p>
+                  <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                    <Button
+                      onClick={goNext}
+                      size="lg"
+                      className="bg-[#FF4F01] hover:bg-[#e54600] text-white px-10 py-6 text-lg rounded-xl group"
+                    >
+                      {currentQuestion.settings?.buttonText || "Start Survey"}
+                      <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                    </Button>
+                  </motion.div>
+                </motion.div>
+              )}
+
+              {/* End Screen */}
+              {currentQuestion.type === "END_SCREEN" && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-center py-8"
+                >
+                  <div className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-8">
+                    <PartyPopper className="w-10 h-10 text-green-400" />
+                  </div>
+                  <p className="text-white/70 text-lg mb-8">
+                    {currentQuestion.description || "Thank you for completing this survey!"}
+                  </p>
+                  {currentQuestion.settings?.redirectUrl && (
+                    <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                      <a
+                        href={currentQuestion.settings.redirectUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 bg-[#FF4F01] hover:bg-[#e54600] text-white px-8 py-4 rounded-xl text-lg font-medium"
+                      >
+                        {currentQuestion.settings?.buttonText || "Continue"}
+                        <ExternalLink className="w-5 h-5" />
+                      </a>
+                    </motion.div>
+                  )}
+                </motion.div>
+              )}
+
+              {/* Statement - Display Only Info */}
+              {currentQuestion.type === "STATEMENT" && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="py-8"
+                >
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-8">
+                    <FileText className="w-10 h-10 text-[#FF4F01] mb-6" />
+                    <div className="prose prose-invert max-w-none">
+                      <p className="text-white/80 text-lg leading-relaxed">
+                        {currentQuestion.description || "This is an informational statement."}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-white/50 text-sm text-center mt-6">
+                    Press Enter or click OK to continue
+                  </p>
+                </motion.div>
+              )}
+
+              {/* Legal / Consent */}
+              {currentQuestion.type === "LEGAL" && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="py-4"
+                >
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-6 mb-6">
+                    <ShieldCheck className="w-8 h-8 text-[#FF4F01] mb-4" />
+                    <p className="text-white/80 text-base leading-relaxed mb-4">
+                      {currentQuestion.description || "Please review and accept the terms below."}
+                    </p>
+                    {currentQuestion.settings?.linkUrl && (
+                      <a
+                        href={currentQuestion.settings.linkUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 text-[#FF4F01] hover:underline text-sm"
+                      >
+                        {currentQuestion.settings?.linkText || "View Terms"}
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      const current = answers[currentQuestion.id] as boolean;
+                      updateAnswer(currentQuestion.id, !current);
+                    }}
+                    className={`w-full p-5 rounded-xl border-2 text-left flex items-center gap-4 transition-all ${
+                      answers[currentQuestion.id] === true
+                        ? "border-green-500 bg-green-500/10"
+                        : "border-white/10 bg-white/5"
+                    }`}
+                  >
+                    <div
+                      className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${
+                        answers[currentQuestion.id] === true
+                          ? "border-green-500 bg-green-500"
+                          : "border-white/30"
+                      }`}
+                    >
+                      {answers[currentQuestion.id] === true && (
+                        <Check className="w-4 h-4 text-white" />
+                      )}
+                    </div>
+                    <span className="text-white/80">
+                      {currentQuestion.settings?.consentText || "I agree to the Terms and Conditions"}
+                    </span>
+                  </motion.button>
                 </motion.div>
               )}
 
