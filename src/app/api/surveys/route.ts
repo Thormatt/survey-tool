@@ -69,7 +69,10 @@ export async function POST(request: NextRequest) {
     return apiSuccess(completeSurvey, 201);
   } catch (error) {
     logger.error("Error creating survey", error);
-    return apiError("Failed to create survey", 500);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error("Survey creation error details:", { errorMessage, errorStack, error });
+    return apiError(`Failed to create survey: ${errorMessage}`, 500);
   }
 }
 
