@@ -607,6 +607,357 @@ function QuestionTypeCard({
 }
 
 // Survey Templates
+// Template categories for organization
+interface TemplateCategory {
+  id: string;
+  name: string;
+  icon: React.ReactNode;
+  templates: SurveyTemplate[];
+}
+
+const templateCategories: TemplateCategory[] = [
+  {
+    id: "hr-workplace",
+    name: "HR & Workplace",
+    icon: <Briefcase className="w-5 h-5" />,
+    templates: [
+      {
+        id: "employee-satisfaction",
+        name: "Employee Satisfaction",
+        description: "Measure employee engagement and workplace satisfaction",
+        icon: <Heart className="w-6 h-6" />,
+        title: "Employee Satisfaction Survey",
+        surveyDescription: "We value your feedback! This anonymous survey helps us understand your experience and improve our workplace.",
+        questions: [
+          { id: "1", type: "RATING", title: "Overall, how satisfied are you working here?", required: true },
+          { id: "2", type: "RATING", title: "How would you rate your work-life balance?", required: true },
+          { id: "3", type: "RATING", title: "How satisfied are you with your manager's support?", required: true },
+          { id: "4", type: "SINGLE_CHOICE", title: "Do you feel your work is recognized and appreciated?", required: true, options: ["Always", "Often", "Sometimes", "Rarely", "Never"] },
+          { id: "5", type: "SINGLE_CHOICE", title: "Would you recommend this company as a great place to work?", required: true, options: ["Definitely yes", "Probably yes", "Not sure", "Probably not", "Definitely not"] },
+          { id: "6", type: "LONG_TEXT", title: "What do you enjoy most about working here?", required: false },
+          { id: "7", type: "LONG_TEXT", title: "What could we improve to make this a better workplace?", required: false },
+        ],
+      },
+      {
+        id: "onboarding",
+        name: "New Hire Onboarding",
+        description: "Evaluate the onboarding experience for new employees",
+        icon: <Briefcase className="w-6 h-6" />,
+        title: "Onboarding Experience Survey",
+        surveyDescription: "We want to ensure every new team member has a great start. Please share your onboarding experience.",
+        questions: [
+          { id: "1", type: "RATING", title: "How would you rate your overall onboarding experience?", required: true },
+          { id: "2", type: "SINGLE_CHOICE", title: "Did you receive adequate training for your role?", required: true, options: ["More than enough", "Just right", "Could use more", "Not enough"] },
+          { id: "3", type: "SINGLE_CHOICE", title: "How welcomed did you feel by your team?", required: true, options: ["Very welcomed", "Welcomed", "Neutral", "Not very welcomed"] },
+          { id: "4", type: "RATING", title: "How clear were your initial goals and expectations?", required: true },
+          { id: "5", type: "LONG_TEXT", title: "What was most helpful during your onboarding?", required: false },
+          { id: "6", type: "LONG_TEXT", title: "What would have made your onboarding experience better?", required: false },
+        ],
+      },
+      {
+        id: "exit-interview",
+        name: "Exit Interview",
+        description: "Gather insights from departing employees",
+        icon: <Users className="w-6 h-6" />,
+        title: "Exit Interview Survey",
+        surveyDescription: "Your feedback will help us improve the workplace for future employees. Thank you for your time.",
+        questions: [
+          { id: "1", type: "SINGLE_CHOICE", title: "What is your primary reason for leaving?", required: true, options: ["New opportunity", "Career growth", "Compensation", "Work-life balance", "Management", "Company culture", "Relocation", "Other"] },
+          { id: "2", type: "RATING", title: "How would you rate your overall experience at the company?", required: true },
+          { id: "3", type: "SINGLE_CHOICE", title: "Would you consider returning to the company in the future?", required: true, options: ["Definitely yes", "Probably yes", "Not sure", "Probably not", "Definitely not"] },
+          { id: "4", type: "LONG_TEXT", title: "What did you enjoy most about working here?", required: false },
+          { id: "5", type: "LONG_TEXT", title: "What could the company have done to keep you?", required: false },
+          { id: "6", type: "LONG_TEXT", title: "Any advice for your replacement or team?", required: false },
+        ],
+      },
+      {
+        id: "team-tools",
+        name: "Team Tools Assessment",
+        description: "Evaluate workplace tools and software your team uses",
+        icon: <Wrench className="w-6 h-6" />,
+        title: "Team Tools Survey",
+        surveyDescription: "Help us understand how you use our workplace tools and what we can improve.",
+        questions: [
+          { id: "1", type: "MULTIPLE_CHOICE", title: "Which of these tools do you use regularly?", description: "Select all that apply", required: true, options: ["Gmail", "Slack", "Notion", "Google Drive", "Zoom", "Figma", "Jira", "Other"] },
+          { id: "2", type: "RATING", title: "How satisfied are you with our current toolset overall?", required: true },
+          { id: "3", type: "SINGLE_CHOICE", title: "Do our current tools help you do your job effectively?", required: true, options: ["Yes, completely", "Mostly", "Somewhat", "Not really", "No, not at all"] },
+          { id: "4", type: "LONG_TEXT", title: "Which tool do you find most valuable and why?", required: false },
+          { id: "5", type: "LONG_TEXT", title: "Are there any tools you wish we had?", required: false },
+        ],
+      },
+      {
+        id: "360-feedback",
+        name: "360° Feedback",
+        description: "Multi-rater feedback for professional development",
+        icon: <Users className="w-6 h-6" />,
+        title: "360° Feedback Survey",
+        surveyDescription: "Please provide honest feedback to help your colleague grow professionally.",
+        questions: [
+          { id: "1", type: "LIKERT", title: "This person communicates clearly and effectively", required: true },
+          { id: "2", type: "LIKERT", title: "This person collaborates well with others", required: true },
+          { id: "3", type: "LIKERT", title: "This person takes initiative and shows leadership", required: true },
+          { id: "4", type: "LIKERT", title: "This person delivers quality work on time", required: true },
+          { id: "5", type: "LONG_TEXT", title: "What are this person's greatest strengths?", required: false },
+          { id: "6", type: "LONG_TEXT", title: "What areas could this person improve?", required: false },
+        ],
+      },
+    ],
+  },
+  {
+    id: "customer-research",
+    name: "Customer & Market",
+    icon: <MessageSquare className="w-5 h-5" />,
+    templates: [
+      {
+        id: "customer-feedback",
+        name: "Customer Feedback",
+        description: "Gather feedback about your products or services",
+        icon: <MessageSquare className="w-6 h-6" />,
+        title: "Customer Feedback Survey",
+        surveyDescription: "We'd love to hear about your experience! Your feedback helps us serve you better.",
+        questions: [
+          { id: "1", type: "RATING", title: "How would you rate your overall experience with us?", required: true },
+          { id: "2", type: "SINGLE_CHOICE", title: "How likely are you to recommend us to others?", required: true, options: ["Very likely", "Likely", "Neutral", "Unlikely", "Very unlikely"] },
+          { id: "3", type: "SINGLE_CHOICE", title: "How well did our product/service meet your expectations?", required: true, options: ["Exceeded expectations", "Met expectations", "Somewhat met expectations", "Did not meet expectations"] },
+          { id: "4", type: "LONG_TEXT", title: "What did you like most about your experience?", required: false },
+          { id: "5", type: "LONG_TEXT", title: "What could we do better?", required: false },
+        ],
+      },
+      {
+        id: "nps-survey",
+        name: "NPS Survey",
+        description: "Measure customer loyalty with Net Promoter Score",
+        icon: <Gauge className="w-6 h-6" />,
+        title: "Net Promoter Score Survey",
+        surveyDescription: "We'd love to hear your thoughts! This quick survey helps us improve.",
+        questions: [
+          { id: "1", type: "NPS", title: "How likely are you to recommend us to a friend or colleague?", required: true },
+          { id: "2", type: "LONG_TEXT", title: "What's the primary reason for your score?", required: false },
+          { id: "3", type: "LONG_TEXT", title: "What could we do to improve your experience?", required: false },
+        ],
+      },
+      {
+        id: "product-feedback",
+        name: "Product Feedback",
+        description: "Collect feedback on specific product features",
+        icon: <Star className="w-6 h-6" />,
+        title: "Product Feedback Survey",
+        surveyDescription: "Help us make our product better by sharing your thoughts.",
+        questions: [
+          { id: "1", type: "RATING", title: "How would you rate this product overall?", required: true },
+          { id: "2", type: "SINGLE_CHOICE", title: "How often do you use this product?", required: true, options: ["Daily", "Weekly", "Monthly", "Rarely", "First time"] },
+          { id: "3", type: "MULTIPLE_CHOICE", title: "Which features do you use most?", required: true, options: ["Feature A", "Feature B", "Feature C", "Feature D"] },
+          { id: "4", type: "SINGLE_CHOICE", title: "How easy is the product to use?", required: true, options: ["Very easy", "Easy", "Neutral", "Difficult", "Very difficult"] },
+          { id: "5", type: "LONG_TEXT", title: "What features would you like to see added?", required: false },
+        ],
+      },
+      {
+        id: "market-research",
+        name: "Market Research",
+        description: "Understand your target market better",
+        icon: <PieChart className="w-6 h-6" />,
+        title: "Market Research Survey",
+        surveyDescription: "Help us understand your needs and preferences better.",
+        questions: [
+          { id: "1", type: "SINGLE_CHOICE", title: "How did you first hear about us?", required: true, options: ["Social media", "Search engine", "Friend/colleague", "Advertisement", "Other"] },
+          { id: "2", type: "SINGLE_CHOICE", title: "What's your biggest challenge in this area?", required: true, options: ["Cost", "Time", "Quality", "Availability", "Other"] },
+          { id: "3", type: "MULTIPLE_CHOICE", title: "Which competitors have you considered?", required: false, options: ["Competitor A", "Competitor B", "Competitor C", "None"] },
+          { id: "4", type: "SINGLE_CHOICE", title: "What's most important to you when choosing a solution?", required: true, options: ["Price", "Quality", "Features", "Support", "Reputation"] },
+          { id: "5", type: "LONG_TEXT", title: "Anything else you'd like us to know?", required: false },
+        ],
+      },
+      {
+        id: "website-feedback",
+        name: "Website Feedback",
+        description: "Get feedback on your website experience",
+        icon: <Globe className="w-6 h-6" />,
+        title: "Website Feedback Survey",
+        surveyDescription: "Help us improve your website experience.",
+        questions: [
+          { id: "1", type: "RATING", title: "How would you rate your experience on our website?", required: true },
+          { id: "2", type: "SINGLE_CHOICE", title: "Did you find what you were looking for?", required: true, options: ["Yes, easily", "Yes, with some effort", "No"] },
+          { id: "3", type: "SINGLE_CHOICE", title: "How would you rate the website's design?", required: true, options: ["Excellent", "Good", "Average", "Poor"] },
+          { id: "4", type: "SINGLE_CHOICE", title: "How fast did pages load?", required: true, options: ["Very fast", "Fast enough", "Slow", "Very slow"] },
+          { id: "5", type: "LONG_TEXT", title: "What would improve your experience on our website?", required: false },
+        ],
+      },
+    ],
+  },
+  {
+    id: "events-meetings",
+    name: "Events & Meetings",
+    icon: <Users className="w-5 h-5" />,
+    templates: [
+      {
+        id: "meeting-feedback",
+        name: "Meeting Feedback",
+        description: "Get feedback after meetings",
+        icon: <Users className="w-6 h-6" />,
+        title: "Meeting Feedback",
+        surveyDescription: "Help us make our meetings more effective!",
+        questions: [
+          { id: "1", type: "RATING", title: "How useful was this meeting for you?", required: true },
+          { id: "2", type: "SINGLE_CHOICE", title: "Was the meeting length appropriate?", required: true, options: ["Too short", "Just right", "Too long"] },
+          { id: "3", type: "SINGLE_CHOICE", title: "Were the meeting objectives clear?", required: true, options: ["Very clear", "Somewhat clear", "Not clear"] },
+          { id: "4", type: "LONG_TEXT", title: "What was the most valuable part of this meeting?", required: false },
+          { id: "5", type: "LONG_TEXT", title: "How could we improve future meetings?", required: false },
+        ],
+      },
+      {
+        id: "event-feedback",
+        name: "Event Feedback",
+        description: "Collect feedback after events or conferences",
+        icon: <Star className="w-6 h-6" />,
+        title: "Event Feedback Survey",
+        surveyDescription: "Thank you for attending! Please share your feedback.",
+        questions: [
+          { id: "1", type: "RATING", title: "How would you rate the event overall?", required: true },
+          { id: "2", type: "SINGLE_CHOICE", title: "How likely are you to attend future events?", required: true, options: ["Very likely", "Likely", "Neutral", "Unlikely", "Very unlikely"] },
+          { id: "3", type: "RATING", title: "How would you rate the speakers/presenters?", required: true },
+          { id: "4", type: "RATING", title: "How would you rate the venue/location?", required: true },
+          { id: "5", type: "LONG_TEXT", title: "What was the highlight of the event?", required: false },
+          { id: "6", type: "LONG_TEXT", title: "What topics would you like covered in future events?", required: false },
+        ],
+      },
+      {
+        id: "webinar-feedback",
+        name: "Webinar Feedback",
+        description: "Get feedback after online webinars",
+        icon: <Globe className="w-6 h-6" />,
+        title: "Webinar Feedback Survey",
+        surveyDescription: "Thanks for joining! Let us know how we did.",
+        questions: [
+          { id: "1", type: "RATING", title: "How would you rate the webinar overall?", required: true },
+          { id: "2", type: "SINGLE_CHOICE", title: "Was the content relevant to you?", required: true, options: ["Very relevant", "Somewhat relevant", "Not relevant"] },
+          { id: "3", type: "SINGLE_CHOICE", title: "Was the webinar length appropriate?", required: true, options: ["Too short", "Just right", "Too long"] },
+          { id: "4", type: "RATING", title: "How would you rate the presenter(s)?", required: true },
+          { id: "5", type: "LONG_TEXT", title: "What topics would you like to see in future webinars?", required: false },
+        ],
+      },
+      {
+        id: "workshop-feedback",
+        name: "Workshop Feedback",
+        description: "Evaluate training workshops",
+        icon: <Wrench className="w-6 h-6" />,
+        title: "Workshop Feedback Survey",
+        surveyDescription: "Your feedback helps us improve our workshops.",
+        questions: [
+          { id: "1", type: "RATING", title: "How would you rate the workshop overall?", required: true },
+          { id: "2", type: "SINGLE_CHOICE", title: "How useful was the content for your work?", required: true, options: ["Very useful", "Useful", "Somewhat useful", "Not useful"] },
+          { id: "3", type: "RATING", title: "How would you rate the instructor/facilitator?", required: true },
+          { id: "4", type: "YES_NO", title: "Would you recommend this workshop to colleagues?", required: true },
+          { id: "5", type: "LONG_TEXT", title: "What skills or knowledge did you gain?", required: false },
+        ],
+      },
+    ],
+  },
+  {
+    id: "education",
+    name: "Education & Training",
+    icon: <Star className="w-5 h-5" />,
+    templates: [
+      {
+        id: "course-evaluation",
+        name: "Course Evaluation",
+        description: "Student feedback on courses",
+        icon: <Star className="w-6 h-6" />,
+        title: "Course Evaluation Survey",
+        surveyDescription: "Your feedback helps us improve the course experience.",
+        questions: [
+          { id: "1", type: "RATING", title: "How would you rate this course overall?", required: true },
+          { id: "2", type: "RATING", title: "How would you rate the instructor's teaching?", required: true },
+          { id: "3", type: "SINGLE_CHOICE", title: "Was the course content well-organized?", required: true, options: ["Very organized", "Organized", "Somewhat organized", "Disorganized"] },
+          { id: "4", type: "SINGLE_CHOICE", title: "Was the workload appropriate?", required: true, options: ["Too light", "Just right", "Too heavy"] },
+          { id: "5", type: "LONG_TEXT", title: "What did you like most about this course?", required: false },
+          { id: "6", type: "LONG_TEXT", title: "What could be improved?", required: false },
+        ],
+      },
+      {
+        id: "training-effectiveness",
+        name: "Training Effectiveness",
+        description: "Measure training program impact",
+        icon: <Wrench className="w-6 h-6" />,
+        title: "Training Effectiveness Survey",
+        surveyDescription: "Help us assess and improve our training programs.",
+        questions: [
+          { id: "1", type: "RATING", title: "How relevant was the training to your job?", required: true },
+          { id: "2", type: "SINGLE_CHOICE", title: "Can you apply what you learned to your work?", required: true, options: ["Definitely", "Probably", "Maybe", "Unlikely", "No"] },
+          { id: "3", type: "RATING", title: "How would you rate the training materials?", required: true },
+          { id: "4", type: "RATING", title: "How would you rate the trainer's knowledge?", required: true },
+          { id: "5", type: "LONG_TEXT", title: "What was the most valuable thing you learned?", required: false },
+        ],
+      },
+      {
+        id: "student-satisfaction",
+        name: "Student Satisfaction",
+        description: "Overall student experience feedback",
+        icon: <Heart className="w-6 h-6" />,
+        title: "Student Satisfaction Survey",
+        surveyDescription: "Help us improve your educational experience.",
+        questions: [
+          { id: "1", type: "RATING", title: "How satisfied are you with your overall experience?", required: true },
+          { id: "2", type: "RATING", title: "How would you rate the quality of instruction?", required: true },
+          { id: "3", type: "RATING", title: "How would you rate the support services?", required: true },
+          { id: "4", type: "SINGLE_CHOICE", title: "Would you recommend this program to others?", required: true, options: ["Definitely", "Probably", "Maybe", "Probably not", "Definitely not"] },
+          { id: "5", type: "LONG_TEXT", title: "What has been the best part of your experience?", required: false },
+        ],
+      },
+    ],
+  },
+  {
+    id: "quick-polls",
+    name: "Quick Polls",
+    icon: <Hash className="w-5 h-5" />,
+    templates: [
+      {
+        id: "quick-rating",
+        name: "Quick Rating",
+        description: "Simple star rating",
+        icon: <Star className="w-6 h-6" />,
+        title: "Quick Rating",
+        surveyDescription: "Rate your experience",
+        questions: [
+          { id: "1", type: "RATING", title: "How would you rate this?", required: true },
+        ],
+      },
+      {
+        id: "quick-nps",
+        name: "Quick NPS",
+        description: "Single NPS question",
+        icon: <Gauge className="w-6 h-6" />,
+        title: "Quick NPS Survey",
+        surveyDescription: "One quick question!",
+        questions: [
+          { id: "1", type: "NPS", title: "How likely are you to recommend us?", required: true },
+        ],
+      },
+      {
+        id: "yes-no-poll",
+        name: "Yes/No Poll",
+        description: "Simple binary choice",
+        icon: <ToggleLeft className="w-6 h-6" />,
+        title: "Quick Poll",
+        surveyDescription: "Answer this quick poll",
+        questions: [
+          { id: "1", type: "YES_NO", title: "Your question here", required: true },
+        ],
+      },
+      {
+        id: "preference-poll",
+        name: "Preference Poll",
+        description: "Choose between options",
+        icon: <CircleDot className="w-6 h-6" />,
+        title: "Preference Poll",
+        surveyDescription: "Help us decide!",
+        questions: [
+          { id: "1", type: "SINGLE_CHOICE", title: "Which do you prefer?", required: true, options: ["Option A", "Option B", "Option C", "No preference"] },
+        ],
+      },
+    ],
+  },
+];
+
+// Flatten templates for backward compatibility
 const surveyTemplates: SurveyTemplate[] = [
   {
     id: "blank",
@@ -617,85 +968,7 @@ const surveyTemplates: SurveyTemplate[] = [
     surveyDescription: "",
     questions: [],
   },
-  {
-    id: "team-tools",
-    name: "Team Tools Assessment",
-    description: "Evaluate workplace tools and software your team uses",
-    icon: <Wrench className="w-6 h-6" />,
-    title: "Team Tools Survey",
-    surveyDescription: "Help us understand how you use our workplace tools and what we can improve. Your feedback is anonymous and will help shape our tool decisions.",
-    questions: [
-      { id: "1", type: "MULTIPLE_CHOICE", title: "Which of these tools do you use regularly?", description: "Select all that apply", required: true, options: ["Gmail", "Slack", "Notion", "Google Drive", "Zoom", "Figma", "Jira", "Other"] },
-      { id: "2", type: "RATING", title: "How satisfied are you with our current toolset overall?", description: "Rate from 1 (very dissatisfied) to 5 (very satisfied)", required: true },
-      { id: "3", type: "SINGLE_CHOICE", title: "Do our current tools help you do your job effectively?", required: true, options: ["Yes, completely", "Mostly", "Somewhat", "Not really", "No, not at all"] },
-      { id: "4", type: "LONG_TEXT", title: "Which tool do you find most valuable and why?", required: false },
-      { id: "5", type: "LONG_TEXT", title: "What's the biggest challenge you face with our current tools?", description: "Be as specific as possible", required: false },
-      { id: "6", type: "LONG_TEXT", title: "Are there any tools you wish we had that we don't currently use?", description: "Feel free to suggest specific tools or categories", required: false },
-    ],
-  },
-  {
-    id: "employee-satisfaction",
-    name: "Employee Satisfaction",
-    description: "Measure employee engagement and workplace satisfaction",
-    icon: <Heart className="w-6 h-6" />,
-    title: "Employee Satisfaction Survey",
-    surveyDescription: "We value your feedback! This anonymous survey helps us understand your experience and improve our workplace.",
-    questions: [
-      { id: "1", type: "RATING", title: "Overall, how satisfied are you working here?", required: true },
-      { id: "2", type: "RATING", title: "How would you rate your work-life balance?", required: true },
-      { id: "3", type: "RATING", title: "How satisfied are you with your manager's support?", required: true },
-      { id: "4", type: "SINGLE_CHOICE", title: "Do you feel your work is recognized and appreciated?", required: true, options: ["Always", "Often", "Sometimes", "Rarely", "Never"] },
-      { id: "5", type: "SINGLE_CHOICE", title: "Would you recommend this company as a great place to work?", required: true, options: ["Definitely yes", "Probably yes", "Not sure", "Probably not", "Definitely not"] },
-      { id: "6", type: "LONG_TEXT", title: "What do you enjoy most about working here?", required: false },
-      { id: "7", type: "LONG_TEXT", title: "What could we improve to make this a better workplace?", required: false },
-    ],
-  },
-  {
-    id: "customer-feedback",
-    name: "Customer Feedback",
-    description: "Gather feedback about your products or services",
-    icon: <MessageSquare className="w-6 h-6" />,
-    title: "Customer Feedback Survey",
-    surveyDescription: "We'd love to hear about your experience! Your feedback helps us serve you better.",
-    questions: [
-      { id: "1", type: "RATING", title: "How would you rate your overall experience with us?", required: true },
-      { id: "2", type: "SINGLE_CHOICE", title: "How likely are you to recommend us to others?", required: true, options: ["Very likely", "Likely", "Neutral", "Unlikely", "Very unlikely"] },
-      { id: "3", type: "SINGLE_CHOICE", title: "How well did our product/service meet your expectations?", required: true, options: ["Exceeded expectations", "Met expectations", "Somewhat met expectations", "Did not meet expectations"] },
-      { id: "4", type: "LONG_TEXT", title: "What did you like most about your experience?", required: false },
-      { id: "5", type: "LONG_TEXT", title: "What could we do better?", required: false },
-    ],
-  },
-  {
-    id: "meeting-feedback",
-    name: "Meeting Feedback",
-    description: "Get feedback after meetings or events",
-    icon: <Users className="w-6 h-6" />,
-    title: "Meeting Feedback",
-    surveyDescription: "Help us make our meetings more effective! Share your thoughts on today's meeting.",
-    questions: [
-      { id: "1", type: "RATING", title: "How useful was this meeting for you?", required: true },
-      { id: "2", type: "SINGLE_CHOICE", title: "Was the meeting length appropriate?", required: true, options: ["Too short", "Just right", "Too long"] },
-      { id: "3", type: "SINGLE_CHOICE", title: "Were the meeting objectives clear?", required: true, options: ["Very clear", "Somewhat clear", "Not clear"] },
-      { id: "4", type: "LONG_TEXT", title: "What was the most valuable part of this meeting?", required: false },
-      { id: "5", type: "LONG_TEXT", title: "How could we improve future meetings?", required: false },
-    ],
-  },
-  {
-    id: "onboarding",
-    name: "New Hire Onboarding",
-    description: "Evaluate the onboarding experience for new employees",
-    icon: <Briefcase className="w-6 h-6" />,
-    title: "Onboarding Experience Survey",
-    surveyDescription: "We want to ensure every new team member has a great start. Please share your onboarding experience.",
-    questions: [
-      { id: "1", type: "RATING", title: "How would you rate your overall onboarding experience?", required: true },
-      { id: "2", type: "SINGLE_CHOICE", title: "Did you receive adequate training for your role?", required: true, options: ["More than enough", "Just right", "Could use more", "Not enough"] },
-      { id: "3", type: "SINGLE_CHOICE", title: "How welcomed did you feel by your team?", required: true, options: ["Very welcomed", "Welcomed", "Neutral", "Not very welcomed"] },
-      { id: "4", type: "RATING", title: "How clear were your initial goals and expectations?", required: true },
-      { id: "5", type: "LONG_TEXT", title: "What was most helpful during your onboarding?", required: false },
-      { id: "6", type: "LONG_TEXT", title: "What would have made your onboarding experience better?", required: false },
-    ],
-  },
+  ...templateCategories.flatMap((cat) => cat.templates),
 ];
 
 interface SortableQuestionProps {
@@ -1469,6 +1742,17 @@ export default function NewSurveyPage() {
   const [importJson, setImportJson] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
 
+  // Template category expansion state
+  const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
+
+  const toggleCategory = (categoryId: string) => {
+    setExpandedCategories((prev) =>
+      prev.includes(categoryId)
+        ? prev.filter((id) => id !== categoryId)
+        : [...prev, categoryId]
+    );
+  };
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -1652,6 +1936,14 @@ export default function NewSurveyPage() {
       return;
     }
 
+    // Validate question titles
+    const emptyQuestions = questions.filter((q) => !q.title.trim());
+    if (emptyQuestions.length > 0) {
+      const questionNumbers = emptyQuestions.map((q) => questions.indexOf(q) + 1).join(", ");
+      setError(`Please add titles to all questions. Question(s) ${questionNumbers} need titles.`);
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
@@ -1677,13 +1969,17 @@ export default function NewSurveyPage() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to save survey");
+        const errorData = await response.json().catch(() => null);
+        if (errorData?.errors && Array.isArray(errorData.errors)) {
+          throw new Error(errorData.errors.join(". "));
+        }
+        throw new Error(errorData?.error || "Failed to save survey");
       }
 
       const survey = await response.json();
       router.push(`/surveys/${survey.id}`);
     } catch (err) {
-      setError("Failed to save survey. Please try again.");
+      setError(err instanceof Error ? err.message : "Failed to save survey. Please try again.");
       console.error(err);
     } finally {
       setSaving(false);
@@ -1939,25 +2235,88 @@ GUIDELINES:
             </button>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {surveyTemplates.map((template) => (
-              <button
-                key={template.id}
-                onClick={() => selectTemplate(template)}
-                className="text-left p-6 rounded-xl border-2 border-[#dcd6f6] hover:border-[#c9c1ed] hover:bg-white/50 transition-all group"
-              >
-                <div className="w-12 h-12 rounded-full bg-[#dcd6f6] flex items-center justify-center mb-4 group-hover:bg-[#c9c1ed] transition-colors">
-                  {template.icon}
+          {/* Start from Scratch - Always Visible */}
+          <div className="mb-6">
+            <button
+              onClick={() => selectTemplate(surveyTemplates[0])}
+              className="w-full text-left p-6 rounded-xl border-2 border-[#dcd6f6] hover:border-[#c9c1ed] hover:bg-white/50 transition-all group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-[#dcd6f6] flex items-center justify-center group-hover:bg-[#c9c1ed] transition-colors">
+                  <Sparkles className="w-6 h-6" />
                 </div>
-                <h3 className="font-['Syne'] font-semibold text-lg mb-1">{template.name}</h3>
-                <p className="text-sm text-[#6b6b7b]">{template.description}</p>
-                {template.questions.length > 0 && (
-                  <p className="text-xs text-[#6b6b7b] mt-2">
-                    {template.questions.length} questions
-                  </p>
-                )}
-              </button>
-            ))}
+                <div>
+                  <h3 className="font-['Syne'] font-semibold text-lg mb-1">Start from Scratch</h3>
+                  <p className="text-sm text-[#6b6b7b]">Create a custom survey with your own questions</p>
+                </div>
+              </div>
+            </button>
+          </div>
+
+          {/* Template Categories - Collapsible */}
+          <div className="space-y-4">
+            {templateCategories.map((category) => {
+              const isExpanded = expandedCategories.includes(category.id);
+              return (
+                <div key={category.id} className="border border-[#dcd6f6] rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => toggleCategory(category.id)}
+                    className="w-full p-4 flex items-center justify-between bg-white hover:bg-[#f5f3ff] transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-[#dcd6f6] flex items-center justify-center">
+                        {category.icon}
+                      </div>
+                      <span className="font-['Syne'] font-semibold">{category.name}</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {category.templates.length} templates
+                      </Badge>
+                    </div>
+                    <ChevronDown
+                      className={`w-5 h-5 text-[#6b6b7b] transition-transform ${
+                        isExpanded ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="p-4 pt-0 grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {category.templates.map((template) => (
+                            <button
+                              key={template.id}
+                              onClick={() => selectTemplate(template)}
+                              className="text-left p-4 rounded-lg border border-[#dcd6f6] hover:border-[#c9c1ed] hover:bg-white/50 transition-all group"
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className="w-10 h-10 rounded-full bg-[#dcd6f6] flex items-center justify-center flex-shrink-0 group-hover:bg-[#c9c1ed] transition-colors">
+                                  {template.icon}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="font-semibold text-sm mb-0.5 truncate">{template.name}</h4>
+                                  <p className="text-xs text-[#6b6b7b] line-clamp-2">{template.description}</p>
+                                  {template.questions.length > 0 && (
+                                    <p className="text-xs text-[#6b6b7b] mt-1">
+                                      {template.questions.length} questions
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              );
+            })}
           </div>
 
           {/* AI Generator Modal */}
