@@ -404,21 +404,22 @@ export function AlertsTab({ surveyId, questions }: AlertsTabProps) {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg overflow-hidden"
+              className="mb-4 p-6 bg-amber-50 border border-amber-200 rounded-xl overflow-hidden"
             >
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Alert Name</label>
+                  <label className="text-sm font-medium mb-2 block">Alert Name</label>
                   <Input
                     value={alertName}
                     onChange={(e) => setAlertName(e.target.value)}
                     placeholder="e.g., Low NPS Score Alert"
+                    className="max-w-md"
                   />
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Notification Channel</label>
-                  <div className="flex gap-2">
+                  <label className="text-sm font-medium mb-3 block">Notification Channel</label>
+                  <div className="flex gap-3">
                     {(["EMAIL", "SLACK", "WEBHOOK"] as const).map((channel) => {
                       const Icon = CHANNEL_ICONS[channel];
                       return (
@@ -430,7 +431,7 @@ export function AlertsTab({ surveyId, questions }: AlertsTabProps) {
                             else if (channel === "SLACK") setAlertConfig({ slackWebhookUrl: "" });
                             else setAlertConfig({ webhookUrl: "" });
                           }}
-                          className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
+                          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-all ${
                             alertChannel === channel
                               ? "bg-[#FF4F01] text-white border-[#FF4F01]"
                               : "bg-white border-[#dcd6f6] hover:border-[#FF4F01]"
@@ -447,7 +448,7 @@ export function AlertsTab({ surveyId, questions }: AlertsTabProps) {
                 {/* Channel-specific config */}
                 {alertChannel === "EMAIL" && (
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Email Recipients</label>
+                    <label className="text-sm font-medium mb-2 block">Email Recipients</label>
                     <Input
                       value={(alertConfig.emails as string[])?.[0] || ""}
                       onChange={(e) =>
@@ -455,8 +456,9 @@ export function AlertsTab({ surveyId, questions }: AlertsTabProps) {
                       }
                       placeholder="email@example.com"
                       type="email"
+                      className="max-w-md"
                     />
-                    <p className="text-xs text-[#6b6b7b] mt-1">
+                    <p className="text-xs text-[#6b6b7b] mt-2">
                       Separate multiple emails with commas
                     </p>
                   </div>
@@ -464,7 +466,7 @@ export function AlertsTab({ surveyId, questions }: AlertsTabProps) {
 
                 {alertChannel === "SLACK" && (
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Slack Webhook URL</label>
+                    <label className="text-sm font-medium mb-2 block">Slack Webhook URL</label>
                     <Input
                       value={(alertConfig.slackWebhookUrl as string) || ""}
                       onChange={(e) =>
@@ -478,7 +480,7 @@ export function AlertsTab({ surveyId, questions }: AlertsTabProps) {
 
                 {alertChannel === "WEBHOOK" && (
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Webhook URL</label>
+                    <label className="text-sm font-medium mb-2 block">Webhook URL</label>
                     <Input
                       value={(alertConfig.webhookUrl as string) || ""}
                       onChange={(e) =>
@@ -495,67 +497,69 @@ export function AlertsTab({ surveyId, questions }: AlertsTabProps) {
                   <label className="text-sm font-medium mb-2 block">
                     Trigger Conditions
                   </label>
-                  <p className="text-xs text-[#6b6b7b] mb-2">
+                  <p className="text-xs text-[#6b6b7b] mb-4">
                     Alert fires when ALL conditions are met
                   </p>
-                  {alertTriggers.map((trigger, idx) => (
-                    <div key={idx} className="flex gap-2 mb-2">
-                      <select
-                        value={trigger.questionId}
-                        onChange={(e) => {
-                          const newTriggers = [...alertTriggers];
-                          newTriggers[idx].questionId = e.target.value;
-                          setAlertTriggers(newTriggers);
-                        }}
-                        className="flex-1 px-3 py-2 border rounded-lg text-sm"
-                      >
-                        <option value="">Select question...</option>
-                        {questions.map((q) => (
-                          <option key={q.id} value={q.id}>
-                            {q.title.slice(0, 40)}
-                            {q.title.length > 40 ? "..." : ""}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={trigger.operator}
-                        onChange={(e) => {
-                          const newTriggers = [...alertTriggers];
-                          newTriggers[idx].operator = e.target.value;
-                          setAlertTriggers(newTriggers);
-                        }}
-                        className="w-32 px-3 py-2 border rounded-lg text-sm"
-                      >
-                        {OPERATORS.map((op) => (
-                          <option key={op.value} value={op.value}>
-                            {op.label}
-                          </option>
-                        ))}
-                      </select>
-                      {trigger.operator !== "IS_EMPTY" && (
-                        <Input
-                          value={trigger.value}
+                  <div className="space-y-3">
+                    {alertTriggers.map((trigger, idx) => (
+                      <div key={idx} className="flex flex-wrap gap-3 items-center">
+                        <select
+                          value={trigger.questionId}
                           onChange={(e) => {
                             const newTriggers = [...alertTriggers];
-                            newTriggers[idx].value = e.target.value;
+                            newTriggers[idx].questionId = e.target.value;
                             setAlertTriggers(newTriggers);
                           }}
-                          placeholder="Value"
-                          className="w-32"
-                        />
-                      )}
-                      {alertTriggers.length > 1 && (
-                        <button
-                          onClick={() =>
-                            setAlertTriggers(alertTriggers.filter((_, i) => i !== idx))
-                          }
-                          className="p-2 text-[#6b6b7b] hover:text-red-500"
+                          className="flex-1 min-w-[200px] px-3 py-2.5 border rounded-lg text-sm bg-white"
                         >
-                          <X className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                          <option value="">Select question...</option>
+                          {questions.map((q) => (
+                            <option key={q.id} value={q.id}>
+                              {q.title.slice(0, 50)}
+                              {q.title.length > 50 ? "..." : ""}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={trigger.operator}
+                          onChange={(e) => {
+                            const newTriggers = [...alertTriggers];
+                            newTriggers[idx].operator = e.target.value;
+                            setAlertTriggers(newTriggers);
+                          }}
+                          className="w-44 px-3 py-2.5 border rounded-lg text-sm bg-white"
+                        >
+                          {OPERATORS.map((op) => (
+                            <option key={op.value} value={op.value}>
+                              {op.label}
+                            </option>
+                          ))}
+                        </select>
+                        {trigger.operator !== "IS_EMPTY" && (
+                          <Input
+                            value={trigger.value}
+                            onChange={(e) => {
+                              const newTriggers = [...alertTriggers];
+                              newTriggers[idx].value = e.target.value;
+                              setAlertTriggers(newTriggers);
+                            }}
+                            placeholder="Value"
+                            className="w-40"
+                          />
+                        )}
+                        {alertTriggers.length > 1 && (
+                          <button
+                            onClick={() =>
+                              setAlertTriggers(alertTriggers.filter((_, i) => i !== idx))
+                            }
+                            className="p-2 text-[#6b6b7b] hover:text-red-500"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -565,13 +569,14 @@ export function AlertsTab({ surveyId, questions }: AlertsTabProps) {
                         { questionId: "", operator: "EQUALS", value: "" },
                       ])
                     }
+                    className="mt-3"
                   >
                     <Plus className="w-4 h-4 mr-1" />
                     Add Condition
                   </Button>
                 </div>
 
-                <div className="flex gap-2 pt-2">
+                <div className="flex gap-3 pt-4 border-t border-amber-200">
                   <Button
                     variant="outline"
                     onClick={() => {
