@@ -357,13 +357,19 @@ export default function EmbedSurveyPage() {
     if (!survey) return;
     setSubmitting(true);
 
+    // Convert answers object to array format expected by API
+    const answersArray = Object.entries(answers).map(([questionId, value]) => ({
+      questionId,
+      value,
+    }));
+
     try {
       const res = await fetch("/api/responses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           surveyId: survey.id,
-          answers,
+          answers: answersArray,
           respondentEmail: survey.isAnonymous ? undefined : respondentInfo.email,
           respondentName: survey.isAnonymous ? undefined : respondentInfo.name,
         }),
