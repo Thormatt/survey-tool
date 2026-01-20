@@ -162,7 +162,7 @@ export default function DistributePage() {
   const [showEmailPreview, setShowEmailPreview] = useState(false);
 
   // Embed code state
-  const [embedType, setEmbedType] = useState<"iframe" | "popup" | "slidein" | "widget" | "exit-intent" | "gtm">("iframe");
+  const [embedType, setEmbedType] = useState<"iframe" | "popup" | "slidein" | "feedback-tab" | "widget" | "exit-intent" | "gtm">("iframe");
   const [embedWidth, setEmbedWidth] = useState("100%");
   const [embedHeight, setEmbedHeight] = useState("600");
   const [embedBgColor, setEmbedBgColor] = useState("#fbf5ea");
@@ -176,6 +176,10 @@ export default function DistributePage() {
   // Slide-in options
   const [slideinPosition, setSlideinPosition] = useState<"bottom-right" | "bottom-left">("bottom-right");
   const [slideinButtonText, setSlideinButtonText] = useState("Feedback");
+  // Feedback tab options (Hotjar-style)
+  const [feedbackTabPosition, setFeedbackTabPosition] = useState<"right" | "left">("right");
+  const [feedbackTabText, setFeedbackTabText] = useState("Feedback");
+  const [feedbackTabColor, setFeedbackTabColor] = useState("#FF4F01");
   // Exit intent options
   const [exitIntentDelay, setExitIntentDelay] = useState("5");
   const [exitIntentShowOnce, setExitIntentShowOnce] = useState(true);
@@ -442,6 +446,126 @@ window.addEventListener('message', function(e) {
     setTimeout(function() {
       surveySlideInOpen = false;
       document.getElementById('survey-slidein').classList.remove('open');
+    }, 2000);
+  }
+});
+</script>`;
+
+      case "feedback-tab":
+        return `<!-- Hotjar-style Feedback Tab -->
+<style>
+#survey-feedback-tab {
+  position: fixed;
+  ${feedbackTabPosition === 'right' ? 'right: 0;' : 'left: 0;'}
+  top: 50%;
+  transform: translateY(-50%) ${feedbackTabPosition === 'right' ? 'rotate(-90deg) translateX(50%)' : 'rotate(90deg) translateX(-50%)'};
+  transform-origin: ${feedbackTabPosition === 'right' ? 'right center' : 'left center'};
+  background: ${feedbackTabColor};
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 14px;
+  border-radius: ${feedbackTabPosition === 'right' ? '8px 8px 0 0' : '0 0 8px 8px'};
+  box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+  z-index: 9998;
+  transition: ${feedbackTabPosition === 'right' ? 'right' : 'left'} 0.3s ease;
+}
+#survey-feedback-tab:hover {
+  ${feedbackTabPosition === 'right' ? 'right: 4px;' : 'left: 4px;'}
+}
+#survey-feedback-panel {
+  position: fixed;
+  ${feedbackTabPosition === 'right' ? 'right: -420px;' : 'left: -420px;'}
+  top: 50%;
+  transform: translateY(-50%);
+  width: 400px;
+  max-width: calc(100vw - 40px);
+  max-height: 80vh;
+  background: #fff;
+  border-radius: ${feedbackTabPosition === 'right' ? '16px 0 0 16px' : '0 16px 16px 0'};
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3);
+  z-index: 9999;
+  overflow: hidden;
+  transition: ${feedbackTabPosition === 'right' ? 'right' : 'left'} 0.3s ease;
+}
+#survey-feedback-panel.open {
+  ${feedbackTabPosition === 'right' ? 'right: 0;' : 'left: 0;'}
+}
+#survey-feedback-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  background: ${feedbackTabColor};
+  color: #fff;
+}
+#survey-feedback-close {
+  background: rgba(255,255,255,0.2);
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: #fff;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.2s;
+}
+#survey-feedback-close:hover { background: rgba(255,255,255,0.3); }
+@media (max-width: 480px) {
+  #survey-feedback-panel {
+    width: 100%;
+    max-width: 100%;
+    ${feedbackTabPosition === 'right' ? 'right: -100%;' : 'left: -100%;'}
+    border-radius: 0;
+  }
+  #survey-feedback-panel.open {
+    ${feedbackTabPosition === 'right' ? 'right: 0;' : 'left: 0;'}
+  }
+}
+</style>
+
+<button id="survey-feedback-tab" onclick="toggleFeedbackPanel()">
+  ${feedbackTabText}
+</button>
+
+<div id="survey-feedback-panel">
+  <div id="survey-feedback-header">
+    <span style="font-weight:600;font-size:15px;">${feedbackTabText}</span>
+    <button id="survey-feedback-close" onclick="toggleFeedbackPanel()">&times;</button>
+  </div>
+  <iframe
+    src="${embedUrl}"
+    style="width:100%;height:calc(80vh - 56px);border:none;"
+    allow="clipboard-write"
+  ></iframe>
+</div>
+
+<script>
+let feedbackPanelOpen = false;
+function toggleFeedbackPanel() {
+  feedbackPanelOpen = !feedbackPanelOpen;
+  const panel = document.getElementById('survey-feedback-panel');
+  const tab = document.getElementById('survey-feedback-tab');
+  if (feedbackPanelOpen) {
+    panel.classList.add('open');
+    tab.style.${feedbackTabPosition === 'right' ? 'right' : 'left'} = '${feedbackTabPosition === 'right' ? '400px' : '400px'}';
+  } else {
+    panel.classList.remove('open');
+    tab.style.${feedbackTabPosition === 'right' ? 'right' : 'left'} = '0';
+  }
+}
+// Close on completion
+window.addEventListener('message', function(e) {
+  if (e.data.type === 'survey:completed') {
+    setTimeout(function() {
+      feedbackPanelOpen = false;
+      document.getElementById('survey-feedback-panel').classList.remove('open');
+      document.getElementById('survey-feedback-tab').style.${feedbackTabPosition === 'right' ? 'right' : 'left'} = '0';
     }, 2000);
   }
 });
@@ -1432,7 +1556,8 @@ window.addEventListener('message', function(e) {
                   {[
                     { id: "iframe", label: "Inline", icon: Square, desc: "Embed directly on page" },
                     { id: "popup", label: "Popup", icon: MousePointerClick, desc: "Button opens modal" },
-                    { id: "slidein", label: "Slide-in", icon: MessageSquare, desc: "Floating feedback button" },
+                    { id: "slidein", label: "Slide-in", icon: MessageSquare, desc: "Floating button at corner" },
+                    { id: "feedback-tab", label: "Feedback Tab", icon: MessageSquare, desc: "Side tab like Hotjar" },
                     { id: "widget", label: "Widget", icon: Puzzle, desc: "JavaScript widget" },
                     { id: "exit-intent", label: "Exit Intent", icon: LogOut, desc: "Show when leaving" },
                     { id: "gtm", label: "GTM", icon: Tag, desc: "Google Tag Manager" },
@@ -1654,6 +1779,95 @@ window.addEventListener('message', function(e) {
                   </div>
                 )}
 
+                {embedType === "feedback-tab" && (
+                  <div className="space-y-4 p-4 bg-[#fbf5ea] rounded-lg">
+                    <p className="text-sm font-medium text-[#1a1a2e]">Feedback Tab Options (Hotjar-style)</p>
+                    <p className="text-xs text-[#6b6b7b]">
+                      A vertical tab on the side of the screen that slides out to reveal the survey.
+                    </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm text-[#6b6b7b] mb-1 block">Tab Text</label>
+                        <Input
+                          value={feedbackTabText}
+                          onChange={(e) => setFeedbackTabText(e.target.value)}
+                          placeholder="Feedback"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm text-[#6b6b7b] mb-1 block">Position</label>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setFeedbackTabPosition("right")}
+                            className={`flex-1 py-2 px-3 rounded border text-sm transition-all ${
+                              feedbackTabPosition === "right"
+                                ? "bg-[#1a1a2e] text-white border-[#1a1a2e]"
+                                : "bg-white border-[#dcd6f6]"
+                            }`}
+                          >
+                            → Right
+                          </button>
+                          <button
+                            onClick={() => setFeedbackTabPosition("left")}
+                            className={`flex-1 py-2 px-3 rounded border text-sm transition-all ${
+                              feedbackTabPosition === "left"
+                                ? "bg-[#1a1a2e] text-white border-[#1a1a2e]"
+                                : "bg-white border-[#dcd6f6]"
+                            }`}
+                          >
+                            ← Left
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm text-[#6b6b7b] mb-1 block">Tab Color</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="color"
+                          value={feedbackTabColor}
+                          onChange={(e) => setFeedbackTabColor(e.target.value)}
+                          className="w-10 h-10 rounded border border-[#dcd6f6] cursor-pointer"
+                        />
+                        <Input
+                          value={feedbackTabColor}
+                          onChange={(e) => setFeedbackTabColor(e.target.value)}
+                          className="flex-1"
+                        />
+                      </div>
+                    </div>
+                    {/* Visual Preview */}
+                    <div className="pt-2">
+                      <p className="text-xs text-[#6b6b7b] mb-2">Preview:</p>
+                      <div className="relative border border-[#dcd6f6] rounded-lg bg-white h-32 overflow-hidden">
+                        {/* Mini website mockup */}
+                        <div className="absolute top-2 left-2 right-2 h-3 bg-[#e5e5e5] rounded" />
+                        <div className="absolute top-7 left-2 w-1/2 h-2 bg-[#f0f0f0] rounded" />
+                        <div className="absolute top-11 left-2 w-3/4 h-2 bg-[#f0f0f0] rounded" />
+                        <div className="absolute top-15 left-2 w-2/3 h-2 bg-[#f0f0f0] rounded" />
+                        {/* Feedback tab */}
+                        <div
+                          className={`absolute top-1/2 -translate-y-1/2 ${
+                            feedbackTabPosition === "right" ? "right-0" : "left-0"
+                          }`}
+                          style={{
+                            transform: `translateY(-50%) ${feedbackTabPosition === "right" ? "rotate(-90deg) translateX(50%)" : "rotate(90deg) translateX(-50%)"}`,
+                            transformOrigin: feedbackTabPosition === "right" ? "right center" : "left center",
+                            background: feedbackTabColor,
+                            color: "#fff",
+                            padding: "4px 10px",
+                            fontWeight: 600,
+                            fontSize: "10px",
+                            borderRadius: feedbackTabPosition === "right" ? "4px 4px 0 0" : "0 0 4px 4px",
+                          }}
+                        >
+                          {feedbackTabText}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {embedType === "widget" && (
                   <div className="space-y-4 p-4 bg-[#fbf5ea] rounded-lg">
                     <p className="text-sm font-medium text-[#1a1a2e]">Widget Options</p>
@@ -1816,7 +2030,176 @@ window.addEventListener('message', function(e) {
                   </div>
                 )}
 
-                {/* Embed Code Preview */}
+                {/* Visual Embed Preview */}
+                <div className="border border-[#dcd6f6] rounded-lg overflow-hidden">
+                  <div className="bg-[#f8f8fc] px-4 py-3 border-b border-[#dcd6f6] flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Eye className="w-4 h-4 text-[#6b6b7b]" />
+                      <span className="text-sm font-medium">Live Preview</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-[#6b6b7b]">
+                      <span>How it will look on your website</span>
+                    </div>
+                  </div>
+                  <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 p-4" style={{ minHeight: "300px" }}>
+                    {/* Fake website mockup */}
+                    <div className="bg-white rounded-lg shadow-lg overflow-hidden max-w-4xl mx-auto">
+                      {/* Fake browser bar */}
+                      <div className="bg-[#f0f0f0] px-3 py-2 flex items-center gap-2 border-b">
+                        <div className="flex gap-1.5">
+                          <div className="w-3 h-3 rounded-full bg-[#ff5f57]" />
+                          <div className="w-3 h-3 rounded-full bg-[#febc2e]" />
+                          <div className="w-3 h-3 rounded-full bg-[#28c840]" />
+                        </div>
+                        <div className="flex-1 bg-white rounded px-3 py-1 text-xs text-[#6b6b7b]">
+                          yourwebsite.com
+                        </div>
+                      </div>
+                      {/* Website content with embed */}
+                      <div className="relative p-4 min-h-[250px]">
+                        {/* Fake content */}
+                        <div className="space-y-2 mb-4">
+                          <div className="h-4 bg-[#e5e5e5] rounded w-3/4" />
+                          <div className="h-3 bg-[#f0f0f0] rounded w-full" />
+                          <div className="h-3 bg-[#f0f0f0] rounded w-5/6" />
+                        </div>
+
+                        {/* Inline iframe preview */}
+                        {embedType === "iframe" && (
+                          <div
+                            className="mx-auto border border-dashed border-[#FF4F01] rounded-lg overflow-hidden"
+                            style={{
+                              width: embedWidth.includes("%") ? embedWidth : `${Math.min(parseInt(embedWidth) || 400, 400)}px`,
+                              height: `${Math.min(parseInt(embedHeight) || 200, 200)}px`,
+                              background: embedBgColor,
+                            }}
+                          >
+                            <div className="h-full flex items-center justify-center text-xs text-[#6b6b7b]">
+                              <div className="text-center p-2">
+                                <div className="font-medium mb-1" style={{ color: embedAccentColor }}>Survey Embed</div>
+                                <div>{embedWidth} × {embedHeight}px</div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Popup button preview */}
+                        {embedType === "popup" && (
+                          <button
+                            className="transition-all"
+                            style={{
+                              background: popupButtonStyle === "filled" ? embedAccentColor : "transparent",
+                              color: popupButtonStyle === "filled" ? "#fff" : embedAccentColor,
+                              border: `2px solid ${embedAccentColor}`,
+                              padding: "8px 16px",
+                              borderRadius: "6px",
+                              fontWeight: 600,
+                              fontSize: "12px",
+                              cursor: "default",
+                            }}
+                          >
+                            {popupButtonText}
+                          </button>
+                        )}
+
+                        {/* Slide-in button preview */}
+                        {embedType === "slidein" && (
+                          <div
+                            className={`absolute bottom-3 ${slideinPosition === "bottom-right" ? "right-3" : "left-3"}`}
+                          >
+                            <button
+                              style={{
+                                background: embedAccentColor,
+                                color: "#fff",
+                                padding: "8px 14px",
+                                borderRadius: "50px",
+                                fontWeight: 600,
+                                fontSize: "11px",
+                                border: "none",
+                                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                                cursor: "default",
+                              }}
+                            >
+                              💬 {slideinButtonText}
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Feedback tab preview */}
+                        {embedType === "feedback-tab" && (
+                          <div
+                            className={`absolute top-1/2 ${feedbackTabPosition === "right" ? "right-0" : "left-0"}`}
+                            style={{
+                              transform: `translateY(-50%) ${feedbackTabPosition === "right" ? "rotate(-90deg) translateX(50%)" : "rotate(90deg) translateX(-50%)"}`,
+                              transformOrigin: feedbackTabPosition === "right" ? "right center" : "left center",
+                              background: feedbackTabColor,
+                              color: "#fff",
+                              padding: "6px 14px",
+                              fontWeight: 600,
+                              fontSize: "11px",
+                              borderRadius: feedbackTabPosition === "right" ? "6px 6px 0 0" : "0 0 6px 6px",
+                              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                            }}
+                          >
+                            {feedbackTabText}
+                          </div>
+                        )}
+
+                        {/* Widget preview */}
+                        {embedType === "widget" && (
+                          <div
+                            className="mx-auto border border-dashed border-[#FF4F01] rounded-lg overflow-hidden"
+                            style={{
+                              width: "100%",
+                              maxWidth: "400px",
+                              height: "180px",
+                              background: embedBgColor,
+                            }}
+                          >
+                            <div className="h-full flex items-center justify-center text-xs text-[#6b6b7b]">
+                              <div className="text-center p-2">
+                                <div className="font-medium mb-1" style={{ color: embedAccentColor }}>Widget Embed</div>
+                                <div>Auto-resizing container</div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Exit intent preview - show as popup overlay */}
+                        {embedType === "exit-intent" && (
+                          <div className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-b-lg">
+                            <div className="bg-white rounded-lg shadow-xl max-w-xs w-full mx-4 overflow-hidden">
+                              <div
+                                className="p-3 text-white text-center text-xs"
+                                style={{ background: embedAccentColor }}
+                              >
+                                <div className="font-semibold">Wait! Before you go...</div>
+                              </div>
+                              <div
+                                className="p-4 text-center text-xs"
+                                style={{ background: embedBgColor }}
+                              >
+                                Survey appears here
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* GTM preview */}
+                        {embedType === "gtm" && (
+                          <div className="text-center p-4">
+                            <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#f0f0f0] rounded-lg text-xs text-[#6b6b7b]">
+                              <Tag className="w-4 h-4" />
+                              GTM triggers {gtmDisplayMode} on {gtmTrigger}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Embed Code */}
                 <div>
                   <label className="text-sm font-medium mb-2 block">Generated Code</label>
                   <div className="relative">
