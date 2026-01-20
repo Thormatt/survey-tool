@@ -47,20 +47,22 @@ export async function POST(
       },
     });
 
-    // Duplicate all questions in bulk
+    // Duplicate questions individually (createMany uses transactions not supported in Neon HTTP mode)
     if (original.questions.length > 0) {
-      await db.question.createMany({
-        data: original.questions.map((question) => ({
-          surveyId: duplicateSurvey.id,
-          type: question.type,
-          title: question.title,
-          description: question.description,
-          required: question.required,
-          order: question.order,
-          options: question.options as Prisma.InputJsonValue | undefined,
-          settings: question.settings as Prisma.InputJsonValue | undefined,
-        })),
-      });
+      for (const question of original.questions) {
+        await db.question.create({
+          data: {
+            surveyId: duplicateSurvey.id,
+            type: question.type,
+            title: question.title,
+            description: question.description,
+            required: question.required,
+            order: question.order,
+            options: question.options as Prisma.InputJsonValue | undefined,
+            settings: question.settings as Prisma.InputJsonValue | undefined,
+          },
+        });
+      }
     }
 
     // Fetch the complete duplicated survey

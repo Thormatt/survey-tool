@@ -81,15 +81,17 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Create answers in bulk
+    // Create answers individually (createMany uses transactions not supported in Neon HTTP mode)
     if (answers && answers.length > 0) {
-      await db.answer.createMany({
-        data: answers.map((answer) => ({
-          responseId: response.id,
-          questionId: answer.questionId,
-          value: answer.value as Prisma.InputJsonValue,
-        })),
-      });
+      for (const answer of answers) {
+        await db.answer.create({
+          data: {
+            responseId: response.id,
+            questionId: answer.questionId,
+            value: answer.value as Prisma.InputJsonValue,
+          },
+        });
+      }
     }
 
     // Mark invitation as completed for INVITE_ONLY surveys

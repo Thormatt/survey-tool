@@ -130,13 +130,15 @@ export async function POST(
       return apiSuccess({ results });
     }
 
-    // Bulk create invitations
-    await db.invitation.createMany({
-      data: newEmails.map((email) => ({
-        surveyId: id,
-        email: email.toLowerCase(),
-      })),
-    });
+    // Create invitations individually (createMany uses transactions not supported in Neon HTTP mode)
+    for (const email of newEmails) {
+      await db.invitation.create({
+        data: {
+          surveyId: id,
+          email: email.toLowerCase(),
+        },
+      });
+    }
 
     // Fetch created invitations to get tokens
     const createdInvitations = await db.invitation.findMany({

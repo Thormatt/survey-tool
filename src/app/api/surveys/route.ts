@@ -37,20 +37,23 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Create questions separately
+    // Create questions individually (createMany uses transactions which aren't supported in Neon HTTP mode)
     if (questions && questions.length > 0) {
-      await db.question.createMany({
-        data: questions.map((q, i) => ({
-          surveyId: survey.id,
-          type: q.type as QuestionType,
-          title: q.title,
-          description: q.description,
-          required: q.required ?? false,
-          order: i,
-          options: q.options as Prisma.InputJsonValue ?? null,
-          settings: q.settings as Prisma.InputJsonValue ?? null,
-        })),
-      });
+      for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        await db.question.create({
+          data: {
+            surveyId: survey.id,
+            type: q.type as QuestionType,
+            title: q.title,
+            description: q.description,
+            required: q.required ?? false,
+            order: i,
+            options: q.options as Prisma.InputJsonValue ?? null,
+            settings: q.settings as Prisma.InputJsonValue ?? null,
+          },
+        });
+      }
     }
 
     // Fetch the complete survey with questions

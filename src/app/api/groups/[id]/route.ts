@@ -85,16 +85,25 @@ export async function PATCH(
     if (name !== undefined) updateData.name = name.trim();
     if (color !== undefined) updateData.color = color;
 
-    // Handle member additions
+    // Handle member additions (individual creates to avoid transaction issues with Neon HTTP mode)
     if (addMembers && addMembers.length > 0) {
-      await db.emailGroupMember.createMany({
-        data: addMembers.map((m) => ({
-          groupId: id,
-          email: m.email.toLowerCase().trim(),
-          name: m.name?.trim() || null,
-        })),
-        skipDuplicates: true,
-      });
+      for (const m of addMembers) {
+        try {
+          await db.emailGroupMember.create({
+            data: {
+              groupId: id,
+              email: m.email.toLowerCase().trim(),
+              name: m.name?.trim() || null,
+            },
+          });
+        } catch (err) {
+          // Skip duplicates silently (equivalent to skipDuplicates: true)
+          if (err instanceof Error && err.message.includes("Unique constraint")) {
+            continue;
+          }
+          throw err;
+        }
+      }
     }
 
     // Handle member removals
