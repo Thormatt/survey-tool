@@ -904,13 +904,17 @@ window.addEventListener('message', function(e) {
   '.gtm-survey-iframe { width: 100%; height: 500px; border: none; }' +
   '.gtm-survey-slidein {' +
     'position: fixed; ${slideinPos}: 20px; bottom: 20px;' +
-    'width: 380px; max-width: calc(100vw - 40px);' +
+    'width: 400px; max-width: calc(100vw - 40px);' +
     'background: #fff; border-radius: 16px;' +
     'box-shadow: 0 10px 40px rgba(0,0,0,0.2); z-index: 999999;' +
     'overflow: hidden; transform: translateY(100%); opacity: 0;' +
-    'transition: transform 0.4s ease, opacity 0.3s;' +
+    'transition: transform 0.4s ease, opacity 0.3s, height 0.3s ease;' +
   '}' +
   '.gtm-survey-slidein.visible { transform: translateY(0); opacity: 1; }' +
+  '.gtm-survey-slidein.minimized { height: 48px !important; }' +
+  '.gtm-survey-slidein.minimized iframe { display: none; }' +
+  '.gtm-survey-slidein .gtm-header-btn { background: rgba(255,255,255,0.2); border: none; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 18px; color: #fff; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }' +
+  '.gtm-survey-slidein .gtm-header-btn:hover { background: rgba(255,255,255,0.3); }' +
   '.gtm-survey-banner {' +
     'position: fixed; bottom: 0; left: 0; right: 0;' +
     'background: #fff; box-shadow: 0 -4px 20px rgba(0,0,0,0.15);' +
@@ -952,11 +956,15 @@ window.addEventListener('message', function(e) {
     else if (CONFIG.displayMode === 'slidein') {
       var slidein = document.createElement('div');
       slidein.className = 'gtm-survey-slidein';
+      slidein.id = 'gtm-survey-slidein';
       slidein.innerHTML = '<div class="gtm-survey-header">' +
         '<span>Quick Feedback</span>' +
-        '<button onclick="this.closest(\\'.gtm-survey-slidein\\').remove()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&times;</button>' +
+        '<div style="display:flex;gap:6px;">' +
+          '<button class="gtm-header-btn" onclick="var s=document.getElementById(\\'gtm-survey-slidein\\');s.classList.toggle(\\'minimized\\');this.innerHTML=s.classList.contains(\\'minimized\\')?\\'+\\':\\'\\u2212\\';" title="Minimize">\\u2212</button>' +
+          '<button class="gtm-header-btn" onclick="this.closest(\\'.gtm-survey-slidein\\').remove()" title="Close">&times;</button>' +
+        '</div>' +
       '</div>' +
-      '<iframe style="width:100%;height:450px;border:none;" src="' + CONFIG.surveyUrl + '" allow="clipboard-write"></iframe>';
+      '<iframe style="width:100%;height:520px;border:none;" src="' + CONFIG.surveyUrl + '" allow="clipboard-write"></iframe>';
       document.body.appendChild(slidein);
       setTimeout(function() { slidein.classList.add('visible'); }, 10);
     }
@@ -1083,8 +1091,12 @@ window.addEventListener('message', function(e) {
     '.gtm-survey-close { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.1); border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 20px; z-index: 10; }' +
     '.gtm-survey-close:hover { background: rgba(0,0,0,0.2); }' +
     '.gtm-survey-iframe { width: 100%; height: 500px; border: none; }' +
-    '.gtm-survey-slidein { position: fixed; ${slideinPos}: 20px; bottom: 20px; width: 380px; max-width: calc(100vw - 40px); background: #fff; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); z-index: 999999; overflow: hidden; transform: translateY(100%); opacity: 0; transition: transform 0.4s ease, opacity 0.3s; }' +
+    '.gtm-survey-slidein { position: fixed; ${slideinPos}: 20px; bottom: 20px; width: 400px; max-width: calc(100vw - 40px); background: #fff; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); z-index: 999999; overflow: hidden; transform: translateY(100%); opacity: 0; transition: transform 0.4s ease, opacity 0.3s, height 0.3s ease; }' +
     '.gtm-survey-slidein.visible { transform: translateY(0); opacity: 1; }' +
+    '.gtm-survey-slidein.minimized { height: 48px !important; }' +
+    '.gtm-survey-slidein.minimized iframe { display: none; }' +
+    '.gtm-survey-slidein .gtm-header-btn { background: rgba(255,255,255,0.2); border: none; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 18px; color: #fff; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }' +
+    '.gtm-survey-slidein .gtm-header-btn:hover { background: rgba(255,255,255,0.3); }' +
     '.gtm-survey-banner { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; box-shadow: 0 -4px 20px rgba(0,0,0,0.15); z-index: 999999; transform: translateY(100%); transition: transform 0.4s ease; }' +
     '.gtm-survey-banner.visible { transform: translateY(0); }' +
     '.gtm-survey-banner iframe { width: 100%; height: 400px; border: none; }' +
@@ -1107,7 +1119,8 @@ window.addEventListener('message', function(e) {
     } else if (CONFIG.displayMode === 'slidein') {
       var slidein = document.createElement('div');
       slidein.className = 'gtm-survey-slidein';
-      slidein.innerHTML = '<div class="gtm-survey-header"><span>Quick Feedback</span><button onclick="this.closest(\\'.gtm-survey-slidein\\').remove()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&times;</button></div><iframe style="width:100%;height:450px;border:none;" src="' + CONFIG.surveyUrl + '" allow="clipboard-write"></iframe>';
+      slidein.id = 'gtm-survey-slidein';
+      slidein.innerHTML = '<div class="gtm-survey-header"><span>Quick Feedback</span><div style="display:flex;gap:6px;"><button class="gtm-header-btn" onclick="var s=document.getElementById(\\'gtm-survey-slidein\\');s.classList.toggle(\\'minimized\\');this.innerHTML=s.classList.contains(\\'minimized\\')?\\'+\\':\\'\\u2212\\';" title="Minimize">\\u2212</button><button class="gtm-header-btn" onclick="this.closest(\\'.gtm-survey-slidein\\').remove()" title="Close">&times;</button></div></div><iframe style="width:100%;height:520px;border:none;" src="' + CONFIG.surveyUrl + '" allow="clipboard-write"></iframe>';
       document.body.appendChild(slidein);
       setTimeout(function() { slidein.classList.add('visible'); }, 10);
     } else if (CONFIG.displayMode === 'banner') {
