@@ -2722,14 +2722,17 @@ window.addEventListener('message', function(e) {
 
                           {/* Preview Link */}
                           <div className="flex items-center gap-2 pt-4 border-t border-[#dcd6f6]">
-                            <Link href={`/embed/${params.id}`} target="_blank">
+                            <Link
+                              href={`/embed/${params.id}/preview?type=${embedType}&position=${feedbackTabPosition}&accent=${encodeURIComponent(embedAccentColor)}&tabText=${encodeURIComponent(feedbackTabText)}&buttonText=${encodeURIComponent(popupButtonText)}`}
+                              target="_blank"
+                            >
                               <Button variant="outline" size="sm">
                                 <Eye className="w-4 h-4 mr-2" />
                                 Preview Embed
                               </Button>
                             </Link>
                             <p className="text-xs text-[#6b6b7b]">
-                              Opens the embeddable version in a new tab
+                              Opens a simulated website preview
                             </p>
                           </div>
                         </div>
