@@ -1596,9 +1596,9 @@ export default function EditSurveyPage() {
         setAccessType(data.accessType || "UNLISTED");
         setIsAnonymous(data.isAnonymous ?? true);
 
-        // Map questions to local format
+        // Map questions to local format (with fallback to empty array)
         setQuestions(
-          data.questions.map((q: { id: string; type: QuestionType; title: string; description?: string; required: boolean; options?: string[]; settings?: Question["settings"] }) => ({
+          (data.questions || []).map((q: { id: string; type: QuestionType; title: string; description?: string; required: boolean; options?: string[]; settings?: Question["settings"] }) => ({
             id: q.id,
             type: q.type as QuestionType,
             title: q.title,

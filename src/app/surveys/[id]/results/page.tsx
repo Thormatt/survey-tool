@@ -238,7 +238,12 @@ export default function SurveyResultsPage() {
           throw new Error("Results not found");
         }
         const data = await response.json();
-        setSurvey(data);
+        // Ensure questions is always an array to prevent .map errors
+        setSurvey({
+          ...data,
+          questions: data.questions || [],
+          _count: data._count || { responses: 0 },
+        });
       } catch {
         setError("Failed to load results");
       } finally {

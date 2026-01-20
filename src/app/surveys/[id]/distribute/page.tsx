@@ -216,7 +216,9 @@ export default function DistributePage() {
     try {
       const res = await fetch("/api/groups");
       if (res.ok) {
-        setGroups(await res.json());
+        const json = await res.json();
+        // API returns paginated response { data: [...], pagination: {...} }
+        setGroups(json.data || []);
       }
     } catch {
       console.error("Failed to fetch groups");
@@ -241,7 +243,9 @@ export default function DistributePage() {
         setTimeEstimate(calculateTimeEstimate(questionCount));
 
         if (invitationsRes.ok) {
-          setInvitations(await invitationsRes.json());
+          const json = await invitationsRes.json();
+          // API returns paginated response { data: [...], pagination: {...} }
+          setInvitations(json.data || []);
         }
 
         await fetchGroups();
@@ -1094,7 +1098,9 @@ window.addEventListener('message', function(e) {
         // Refresh invitations
         const invitationsRes = await fetch(`/api/surveys/${params.id}/invitations`);
         if (invitationsRes.ok) {
-          setInvitations(await invitationsRes.json());
+          const json = await invitationsRes.json();
+          // API returns paginated response { data: [...], pagination: {...} }
+          setInvitations(json.data || []);
         }
       } else {
         // Show the actual error from Resend

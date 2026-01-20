@@ -1824,7 +1824,7 @@ export default function NewSurveyPage() {
       setTitle(data.title);
       setDescription(data.description);
       setQuestions(
-        data.questions.map((q: Question) => ({
+        (data.questions || []).map((q: Question) => ({
           ...q,
           id: crypto.randomUUID(),
         }))
