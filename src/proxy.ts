@@ -13,6 +13,7 @@ const isPublicRoute = createRouteMatcher([
   "/sign-up(.*)",
   "/unauthorized",  // Unauthorized access page
   "/s/(.*)",  // Public survey response pages
+  "/embed/(.*)",  // Embeddable survey pages
   "/results/(.*)",  // Public results pages
   "/api/responses(.*)",  // API for submitting responses
   "/api/surveys/(.*)/public(.*)",  // Public survey data endpoint
