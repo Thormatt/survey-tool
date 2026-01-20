@@ -459,14 +459,14 @@ function closeSurveyPopup() {
 </div>
 
 <script>
-let surveySlideInOpen = false;
+var surveySlideInOpen = false;
 function toggleSurveySlideIn() {
   surveySlideInOpen = !surveySlideInOpen;
   document.getElementById('survey-slidein').classList.toggle('open', surveySlideInOpen);
 }
 // Close on completion
 window.addEventListener('message', function(e) {
-  if (e.data.type === 'survey:completed') {
+  if (e.data && e.data.type === 'survey:completed') {
     setTimeout(function() {
       surveySlideInOpen = false;
       document.getElementById('survey-slidein').classList.remove('open');
@@ -570,11 +570,11 @@ window.addEventListener('message', function(e) {
 </div>
 
 <script>
-let feedbackPanelOpen = false;
+var feedbackPanelOpen = false;
 function toggleFeedbackPanel() {
   feedbackPanelOpen = !feedbackPanelOpen;
-  const panel = document.getElementById('survey-feedback-panel');
-  const tab = document.getElementById('survey-feedback-tab');
+  var panel = document.getElementById('survey-feedback-panel');
+  var tab = document.getElementById('survey-feedback-tab');
   if (feedbackPanelOpen) {
     panel.classList.add('open');
     tab.style.${feedbackTabPosition === 'right' ? 'right' : 'left'} = '${feedbackTabPosition === 'right' ? '400px' : '400px'}';
@@ -585,7 +585,7 @@ function toggleFeedbackPanel() {
 }
 // Close on completion
 window.addEventListener('message', function(e) {
-  if (e.data.type === 'survey:completed') {
+  if (e.data && e.data.type === 'survey:completed') {
     setTimeout(function() {
       feedbackPanelOpen = false;
       document.getElementById('survey-feedback-panel').classList.remove('open');
@@ -601,11 +601,11 @@ window.addEventListener('message', function(e) {
 
 <script>
 (function() {
-  const container = document.getElementById('survey-widget-${params.id}');
+  var container = document.getElementById('survey-widget-${params.id}');
   if (!container) return;
 
   // Create iframe
-  const iframe = document.createElement('iframe');
+  var iframe = document.createElement('iframe');
   iframe.src = '${embedUrl}';
   iframe.style.cssText = 'width:100%;border:none;border-radius:8px;min-height:400px;';
   iframe.allow = 'clipboard-write';
@@ -613,7 +613,7 @@ window.addEventListener('message', function(e) {
 
   // Auto-resize
   window.addEventListener('message', function(e) {
-    if (e.data.type === 'survey:resize') {
+    if (e.data && e.data.type === 'survey:resize') {
       iframe.style.height = e.data.height + 'px';
     }
   });
@@ -636,13 +636,13 @@ window.addEventListener('message', function(e) {
         return `<!-- Exit Intent Survey Popup (Like Hotjar) -->
 <script>
 (function() {
-  const SURVEY_ID = '${params.id}';
-  const STORAGE_KEY = 'survey_shown_' + SURVEY_ID;
-  const SHOW_ONCE = ${exitIntentShowOnce};
-  const MIN_TIME_ON_PAGE = ${exitIntentDelay} * 1000; // seconds to ms
+  var SURVEY_ID = '${params.id}';
+  var STORAGE_KEY = 'survey_shown_' + SURVEY_ID;
+  var SHOW_ONCE = ${exitIntentShowOnce};
+  var MIN_TIME_ON_PAGE = ${exitIntentDelay} * 1000; // seconds to ms
 
-  let hasShown = false;
-  let pageLoadTime = Date.now();
+  var hasShown = false;
+  var pageLoadTime = Date.now();
 
   // Check if already shown (if show once is enabled)
   if (SHOW_ONCE && localStorage.getItem(STORAGE_KEY)) {
@@ -659,7 +659,7 @@ window.addEventListener('message', function(e) {
     }
 
     // Create overlay
-    const overlay = document.createElement('div');
+    var overlay = document.createElement('div');
     overlay.id = 'survey-exit-overlay';
     overlay.style.cssText = \`
       position: fixed;
@@ -674,7 +674,7 @@ window.addEventListener('message', function(e) {
     \`;
 
     // Create modal
-    const modal = document.createElement('div');
+    var modal = document.createElement('div');
     modal.style.cssText = \`
       background: #fff;
       border-radius: 16px;
@@ -688,7 +688,7 @@ window.addEventListener('message', function(e) {
     \`;
 
     // Header with message
-    const header = document.createElement('div');
+    var header = document.createElement('div');
     header.style.cssText = \`
       background: linear-gradient(135deg, ${embedAccentColor}, ${embedAccentColor}dd);
       color: #fff;
@@ -819,32 +819,35 @@ window.addEventListener('message', function(e) {
         // Build trigger-specific code (ES5 compatible)
         let triggerCode = "";
         if (gtmTrigger === "pageview") {
-          triggerCode = "// Pageview: Show immediately\\n  showSurvey();";
+          triggerCode = `// Pageview: Show immediately
+  showSurvey();`;
         } else if (gtmTrigger === "click") {
-          triggerCode = "// Click: This tag should be triggered by GTM Click trigger\\n  showSurvey();";
+          triggerCode = `// Click: This tag should be triggered by GTM Click trigger
+  showSurvey();`;
         } else if (gtmTrigger === "scroll") {
-          triggerCode = "// Scroll: Show at " + gtmScrollPercent + "% scroll depth\\n" +
-            "  var scrollTriggered = false;\\n" +
-            "  window.addEventListener('scroll', function() {\\n" +
-            "    if (scrollTriggered) return;\\n" +
-            "    var scrollPct = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;\\n" +
-            "    if (scrollPct >= CONFIG.scrollPercent) {\\n" +
-            "      scrollTriggered = true;\\n" +
-            "      showSurvey();\\n" +
-            "    }\\n" +
-            "  });";
+          triggerCode = `// Scroll: Show at ${gtmScrollPercent}% scroll depth
+  var scrollTriggered = false;
+  window.addEventListener('scroll', function() {
+    if (scrollTriggered) return;
+    var scrollPct = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;
+    if (scrollPct >= CONFIG.scrollPercent) {
+      scrollTriggered = true;
+      showSurvey();
+    }
+  });`;
         } else if (gtmTrigger === "time") {
-          triggerCode = "// Time: Show after " + gtmTimeDelay + " seconds\\n  setTimeout(showSurvey, CONFIG.timeDelay * 1000);";
+          triggerCode = `// Time: Show after ${gtmTimeDelay} seconds
+  setTimeout(showSurvey, CONFIG.timeDelay * 1000);`;
         } else if (gtmTrigger === "exit") {
-          triggerCode = "// Exit Intent: Show when mouse leaves viewport\\n" +
-            "  var exitTriggered = false;\\n" +
-            "  document.addEventListener('mouseout', function(e) {\\n" +
-            "    if (exitTriggered) return;\\n" +
-            "    if (e.clientY < 10 && !e.relatedTarget) {\\n" +
-            "      exitTriggered = true;\\n" +
-            "      showSurvey();\\n" +
-            "    }\\n" +
-            "  });";
+          triggerCode = `// Exit Intent: Show when mouse leaves viewport
+  var exitTriggered = false;
+  document.addEventListener('mouseout', function(e) {
+    if (exitTriggered) return;
+    if (e.clientY < 10 && !e.relatedTarget) {
+      exitTriggered = true;
+      showSurvey();
+    }
+  });`;
         }
 
         const slideinPos = slideinPosition === 'bottom-left' ? 'left' : 'right';
@@ -1015,32 +1018,35 @@ window.addEventListener('message', function(e) {
 
     let triggerCode = "";
     if (gtmTrigger === "pageview") {
-      triggerCode = "// Pageview: Show immediately\\n  showSurvey();";
+      triggerCode = `// Pageview: Show immediately
+  showSurvey();`;
     } else if (gtmTrigger === "click") {
-      triggerCode = "// Click: This tag should be triggered by GTM Click trigger\\n  showSurvey();";
+      triggerCode = `// Click: This tag should be triggered by GTM Click trigger
+  showSurvey();`;
     } else if (gtmTrigger === "scroll") {
-      triggerCode = "// Scroll: Show at " + gtmScrollPercent + "% scroll depth\\n" +
-        "  var scrollTriggered = false;\\n" +
-        "  window.addEventListener('scroll', function() {\\n" +
-        "    if (scrollTriggered) return;\\n" +
-        "    var scrollPct = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;\\n" +
-        "    if (scrollPct >= CONFIG.scrollPercent) {\\n" +
-        "      scrollTriggered = true;\\n" +
-        "      showSurvey();\\n" +
-        "    }\\n" +
-        "  });";
+      triggerCode = `// Scroll: Show at ${gtmScrollPercent}% scroll depth
+  var scrollTriggered = false;
+  window.addEventListener('scroll', function() {
+    if (scrollTriggered) return;
+    var scrollPct = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;
+    if (scrollPct >= CONFIG.scrollPercent) {
+      scrollTriggered = true;
+      showSurvey();
+    }
+  });`;
     } else if (gtmTrigger === "time") {
-      triggerCode = "// Time: Show after " + gtmTimeDelay + " seconds\\n  setTimeout(showSurvey, CONFIG.timeDelay * 1000);";
+      triggerCode = `// Time: Show after ${gtmTimeDelay} seconds
+  setTimeout(showSurvey, CONFIG.timeDelay * 1000);`;
     } else if (gtmTrigger === "exit") {
-      triggerCode = "// Exit Intent: Show when mouse leaves viewport\\n" +
-        "  var exitTriggered = false;\\n" +
-        "  document.addEventListener('mouseout', function(e) {\\n" +
-        "    if (exitTriggered) return;\\n" +
-        "    if (e.clientY < 10 && !e.relatedTarget) {\\n" +
-        "      exitTriggered = true;\\n" +
-        "      showSurvey();\\n" +
-        "    }\\n" +
-        "  });";
+      triggerCode = `// Exit Intent: Show when mouse leaves viewport
+  var exitTriggered = false;
+  document.addEventListener('mouseout', function(e) {
+    if (exitTriggered) return;
+    if (e.clientY < 10 && !e.relatedTarget) {
+      exitTriggered = true;
+      showSurvey();
+    }
+  });`;
     }
 
     const slideinPos = slideinPosition === 'bottom-left' ? 'left' : 'right';
