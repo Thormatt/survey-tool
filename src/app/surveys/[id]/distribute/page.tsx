@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
+import { AlertsTab } from "@/components/survey/alerts-tab";
 
 // Animation variants
 const pageVariants = {
@@ -78,6 +79,7 @@ const successVariants = {
 interface Question {
   id: string;
   type: string;
+  title: string;
 }
 
 interface Survey {
@@ -166,6 +168,9 @@ export default function DistributePage() {
   const [embedWidth, setEmbedWidth] = useState("100%");
   const [embedHeight, setEmbedHeight] = useState("600");
   const [embedBgColor, setEmbedBgColor] = useState("#fbf5ea");
+  const [embedBgColor2, setEmbedBgColor2] = useState("#dcd6f6");
+  const [embedBgGradient, setEmbedBgGradient] = useState(false);
+  const [embedGradientDirection, setEmbedGradientDirection] = useState<"to-br" | "to-r" | "to-b" | "to-tr">("to-br");
   const [embedAccentColor, setEmbedAccentColor] = useState("#FF4F01");
   const [embedHideTitle, setEmbedHideTitle] = useState(false);
   const [embedHideDescription, setEmbedHideDescription] = useState(false);
@@ -189,9 +194,10 @@ export default function DistributePage() {
   const [gtmScrollPercent, setGtmScrollPercent] = useState("50");
   const [gtmTimeDelay, setGtmTimeDelay] = useState("10");
 
-  // Collapsible card state
-  const [shareExpanded, setShareExpanded] = useState(true);
-  const [embedExpanded, setEmbedExpanded] = useState(false);
+  // Navigation state
+  const [activeTab, setActiveTab] = useState<"link" | "website" | "email" | "alerts">("link");
+  const [websiteStep, setWebsiteStep] = useState<"gallery" | "configure" | "install">("gallery");
+  const [installMethod, setInstallMethod] = useState<"javascript" | "gtm" | "wordpress">("javascript");
 
   const updateSurvey = async (updates: Partial<Survey>) => {
     if (!survey) return;
@@ -265,7 +271,21 @@ export default function DistributePage() {
 
   // Generate embed URL with customization params
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
-  const embedUrl = `${baseUrl}/embed/${params.id}?bg=${encodeURIComponent(embedBgColor)}&accent=${encodeURIComponent(embedAccentColor)}${embedHideTitle ? "&hideTitle=true" : ""}${embedHideDescription ? "&hideDescription=true" : ""}`;
+  const embedUrl = `${baseUrl}/embed/${params.id}?bg=${encodeURIComponent(embedBgColor)}&accent=${encodeURIComponent(embedAccentColor)}${embedHideTitle ? "&hideTitle=true" : ""}${embedHideDescription ? "&hideDescription=true" : ""}${embedBgGradient ? `&gradient=true&bg2=${encodeURIComponent(embedBgColor2)}&gradientDir=${embedGradientDirection}` : ""}`;
+
+  // Generate gradient or solid background style for previews
+  const getGradientDirection = (dir: string) => {
+    switch (dir) {
+      case "to-r": return "to right";
+      case "to-b": return "to bottom";
+      case "to-br": return "to bottom right";
+      case "to-tr": return "to top right";
+      default: return "to bottom right";
+    }
+  };
+  const previewBgStyle = embedBgGradient
+    ? `linear-gradient(${getGradientDirection(embedGradientDirection)}, ${embedBgColor}, ${embedBgColor2})`
+    : embedBgColor;
 
   // Generate embed code based on type
   const getEmbedCode = () => {
@@ -788,6 +808,47 @@ window.addEventListener('message', function(e) {
 </script>`;
 
       case "gtm":
+        // Build trigger-specific instruction
+        let triggerInstruction = "";
+        if (gtmTrigger === "pageview") triggerInstruction = "→ Use: All Pages or specific Page View trigger";
+        else if (gtmTrigger === "click") triggerInstruction = "→ Use: Click trigger on your target element";
+        else if (gtmTrigger === "scroll") triggerInstruction = "→ Use: Scroll Depth trigger at " + gtmScrollPercent + "%";
+        else if (gtmTrigger === "time") triggerInstruction = "→ Use: Timer trigger with " + gtmTimeDelay + "s interval, limit 1";
+        else if (gtmTrigger === "exit") triggerInstruction = "→ Use: Custom JS variable for exit intent (see below)";
+
+        // Build trigger-specific code (ES5 compatible)
+        let triggerCode = "";
+        if (gtmTrigger === "pageview") {
+          triggerCode = "// Pageview: Show immediately\\n  showSurvey();";
+        } else if (gtmTrigger === "click") {
+          triggerCode = "// Click: This tag should be triggered by GTM Click trigger\\n  showSurvey();";
+        } else if (gtmTrigger === "scroll") {
+          triggerCode = "// Scroll: Show at " + gtmScrollPercent + "% scroll depth\\n" +
+            "  var scrollTriggered = false;\\n" +
+            "  window.addEventListener('scroll', function() {\\n" +
+            "    if (scrollTriggered) return;\\n" +
+            "    var scrollPct = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;\\n" +
+            "    if (scrollPct >= CONFIG.scrollPercent) {\\n" +
+            "      scrollTriggered = true;\\n" +
+            "      showSurvey();\\n" +
+            "    }\\n" +
+            "  });";
+        } else if (gtmTrigger === "time") {
+          triggerCode = "// Time: Show after " + gtmTimeDelay + " seconds\\n  setTimeout(showSurvey, CONFIG.timeDelay * 1000);";
+        } else if (gtmTrigger === "exit") {
+          triggerCode = "// Exit Intent: Show when mouse leaves viewport\\n" +
+            "  var exitTriggered = false;\\n" +
+            "  document.addEventListener('mouseout', function(e) {\\n" +
+            "    if (exitTriggered) return;\\n" +
+            "    if (e.clientY < 10 && !e.relatedTarget) {\\n" +
+            "      exitTriggered = true;\\n" +
+            "      showSurvey();\\n" +
+            "    }\\n" +
+            "  });";
+        }
+
+        const slideinPos = slideinPosition === 'bottom-left' ? 'left' : 'right';
+
         return `<!-- Google Tag Manager Custom HTML Tag -->
 <!--
   SETUP INSTRUCTIONS:
@@ -796,11 +857,7 @@ window.addEventListener('message', function(e) {
   3. Set your trigger based on the selected option below
 
   Trigger Type: ${gtmTrigger.toUpperCase()}
-  ${gtmTrigger === "pageview" ? "→ Use: All Pages or specific Page View trigger" : ""}
-  ${gtmTrigger === "click" ? "→ Use: Click trigger on your target element" : ""}
-  ${gtmTrigger === "scroll" ? `→ Use: Scroll Depth trigger at ${gtmScrollPercent}%` : ""}
-  ${gtmTrigger === "time" ? `→ Use: Timer trigger with ${gtmTimeDelay}s interval, limit 1` : ""}
-  ${gtmTrigger === "exit" ? "→ Use: Custom JS variable for exit intent (see below)" : ""}
+  ${triggerInstruction}
 -->
 <script>
 (function() {
@@ -819,88 +876,50 @@ window.addEventListener('message', function(e) {
   // Check if already shown this session
   if (sessionStorage.getItem(CONFIG.storageKey)) return;
 
-  // Styles
-  var styles = \`
-    .gtm-survey-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.5);
-      z-index: 999999;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      opacity: 0;
-      transition: opacity 0.3s;
-    }
-    .gtm-survey-overlay.visible { opacity: 1; }
-    .gtm-survey-modal {
-      background: #fff;
-      border-radius: 16px;
-      max-width: 550px;
-      width: 100%;
-      max-height: 90vh;
-      overflow: hidden;
-      position: relative;
-      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3);
-      transform: translateY(20px);
-      transition: transform 0.3s;
-    }
-    .gtm-survey-overlay.visible .gtm-survey-modal { transform: translateY(0); }
-    .gtm-survey-close {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background: rgba(0,0,0,0.1);
-      border: none;
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      cursor: pointer;
-      font-size: 20px;
-      z-index: 10;
-    }
-    .gtm-survey-close:hover { background: rgba(0,0,0,0.2); }
-    .gtm-survey-iframe { width: 100%; height: 500px; border: none; }
-    .gtm-survey-slidein {
-      position: fixed;
-      ${slideinPosition === 'bottom-left' ? 'left' : 'right'}: 20px;
-      bottom: 20px;
-      width: 380px;
-      max-width: calc(100vw - 40px);
-      background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-      z-index: 999999;
-      overflow: hidden;
-      transform: translateY(100%);
-      opacity: 0;
-      transition: transform 0.4s ease, opacity 0.3s;
-    }
-    .gtm-survey-slidein.visible { transform: translateY(0); opacity: 1; }
-    .gtm-survey-banner {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: #fff;
-      box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
-      z-index: 999999;
-      transform: translateY(100%);
-      transition: transform 0.4s ease;
-    }
-    .gtm-survey-banner.visible { transform: translateY(0); }
-    .gtm-survey-banner iframe { width: 100%; height: 400px; border: none; }
-    .gtm-survey-header {
-      background: \${CONFIG.accentColor};
-      color: #fff;
-      padding: 12px 16px;
-      font-weight: 600;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-  \`;
+  // Styles (ES5 compatible - using string concatenation)
+  var styles = '.gtm-survey-overlay {' +
+    'position: fixed; top: 0; left: 0; right: 0; bottom: 0;' +
+    'background: rgba(0,0,0,0.5); z-index: 999999;' +
+    'display: flex; align-items: center; justify-content: center;' +
+    'padding: 20px; opacity: 0; transition: opacity 0.3s;' +
+  '}' +
+  '.gtm-survey-overlay.visible { opacity: 1; }' +
+  '.gtm-survey-modal {' +
+    'background: #fff; border-radius: 16px; max-width: 550px; width: 100%;' +
+    'max-height: 90vh; overflow: hidden; position: relative;' +
+    'box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3);' +
+    'transform: translateY(20px); transition: transform 0.3s;' +
+  '}' +
+  '.gtm-survey-overlay.visible .gtm-survey-modal { transform: translateY(0); }' +
+  '.gtm-survey-close {' +
+    'position: absolute; top: 10px; right: 10px;' +
+    'background: rgba(0,0,0,0.1); border: none;' +
+    'width: 32px; height: 32px; border-radius: 50%;' +
+    'cursor: pointer; font-size: 20px; z-index: 10;' +
+  '}' +
+  '.gtm-survey-close:hover { background: rgba(0,0,0,0.2); }' +
+  '.gtm-survey-iframe { width: 100%; height: 500px; border: none; }' +
+  '.gtm-survey-slidein {' +
+    'position: fixed; ${slideinPos}: 20px; bottom: 20px;' +
+    'width: 380px; max-width: calc(100vw - 40px);' +
+    'background: #fff; border-radius: 16px;' +
+    'box-shadow: 0 10px 40px rgba(0,0,0,0.2); z-index: 999999;' +
+    'overflow: hidden; transform: translateY(100%); opacity: 0;' +
+    'transition: transform 0.4s ease, opacity 0.3s;' +
+  '}' +
+  '.gtm-survey-slidein.visible { transform: translateY(0); opacity: 1; }' +
+  '.gtm-survey-banner {' +
+    'position: fixed; bottom: 0; left: 0; right: 0;' +
+    'background: #fff; box-shadow: 0 -4px 20px rgba(0,0,0,0.15);' +
+    'z-index: 999999; transform: translateY(100%); transition: transform 0.4s ease;' +
+  '}' +
+  '.gtm-survey-banner.visible { transform: translateY(0); }' +
+  '.gtm-survey-banner iframe { width: 100%; height: 400px; border: none; }' +
+  '.gtm-survey-header {' +
+    'background: ' + CONFIG.accentColor + ';' +
+    'color: #fff; padding: 12px 16px; font-weight: 600;' +
+    'display: flex; justify-content: space-between; align-items: center;' +
+  '}';
 
   // Inject styles
   var styleEl = document.createElement('style');
@@ -913,12 +932,10 @@ window.addEventListener('message', function(e) {
     if (CONFIG.displayMode === 'popup') {
       var overlay = document.createElement('div');
       overlay.className = 'gtm-survey-overlay';
-      overlay.innerHTML = \`
-        <div class="gtm-survey-modal">
-          <button class="gtm-survey-close" onclick="this.closest('.gtm-survey-overlay').remove()">&times;</button>
-          <iframe class="gtm-survey-iframe" src="\${CONFIG.surveyUrl}" allow="clipboard-write"></iframe>
-        </div>
-      \`;
+      overlay.innerHTML = '<div class="gtm-survey-modal">' +
+        '<button class="gtm-survey-close" onclick="this.closest(\\'.gtm-survey-overlay\\').remove()">&times;</button>' +
+        '<iframe class="gtm-survey-iframe" src="' + CONFIG.surveyUrl + '" allow="clipboard-write"></iframe>' +
+      '</div>';
       document.body.appendChild(overlay);
       document.body.style.overflow = 'hidden';
       setTimeout(function() { overlay.classList.add('visible'); }, 10);
@@ -932,26 +949,22 @@ window.addEventListener('message', function(e) {
     else if (CONFIG.displayMode === 'slidein') {
       var slidein = document.createElement('div');
       slidein.className = 'gtm-survey-slidein';
-      slidein.innerHTML = \`
-        <div class="gtm-survey-header">
-          <span>Quick Feedback</span>
-          <button onclick="this.closest('.gtm-survey-slidein').remove()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&times;</button>
-        </div>
-        <iframe style="width:100%;height:450px;border:none;" src="\${CONFIG.surveyUrl}" allow="clipboard-write"></iframe>
-      \`;
+      slidein.innerHTML = '<div class="gtm-survey-header">' +
+        '<span>Quick Feedback</span>' +
+        '<button onclick="this.closest(\\'.gtm-survey-slidein\\').remove()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&times;</button>' +
+      '</div>' +
+      '<iframe style="width:100%;height:450px;border:none;" src="' + CONFIG.surveyUrl + '" allow="clipboard-write"></iframe>';
       document.body.appendChild(slidein);
       setTimeout(function() { slidein.classList.add('visible'); }, 10);
     }
     else if (CONFIG.displayMode === 'banner') {
       var banner = document.createElement('div');
       banner.className = 'gtm-survey-banner';
-      banner.innerHTML = \`
-        <div class="gtm-survey-header">
-          <span>We'd love your feedback!</span>
-          <button onclick="this.closest('.gtm-survey-banner').remove()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&times;</button>
-        </div>
-        <iframe src="\${CONFIG.surveyUrl}" allow="clipboard-write"></iframe>
-      \`;
+      banner.innerHTML = '<div class="gtm-survey-header">' +
+        '<span>We\\'d love your feedback!</span>' +
+        '<button onclick="this.closest(\\'.gtm-survey-banner\\').remove()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&times;</button>' +
+      '</div>' +
+      '<iframe style="width:100%;height:400px;border:none;" src="' + CONFIG.surveyUrl + '" allow="clipboard-write"></iframe>';
       document.body.appendChild(banner);
       setTimeout(function() { banner.classList.add('visible'); }, 10);
     }
@@ -959,14 +972,14 @@ window.addEventListener('message', function(e) {
     // Listen for completion
     window.addEventListener('message', function(e) {
       if (e.data && e.data.type === 'survey:completed') {
-        // Push to dataLayer for GTM tracking
         window.dataLayer = window.dataLayer || [];
         window.dataLayer.push({
           event: 'surveyCompleted',
           surveyId: CONFIG.surveyId
         });
         setTimeout(function() {
-          document.querySelectorAll('.gtm-survey-overlay, .gtm-survey-slidein, .gtm-survey-banner').forEach(function(el) { el.remove(); });
+          var els = document.querySelectorAll('.gtm-survey-overlay, .gtm-survey-slidein, .gtm-survey-banner');
+          for (var i = 0; i < els.length; i++) { els[i].parentNode.removeChild(els[i]); }
           document.body.style.overflow = '';
         }, 2000);
       }
@@ -974,29 +987,7 @@ window.addEventListener('message', function(e) {
   }
 
   // Trigger logic
-  ${gtmTrigger === "pageview" ? "// Pageview: Show immediately\n  showSurvey();" : ""}
-  ${gtmTrigger === "click" ? "// Click: This tag should be triggered by GTM Click trigger\n  showSurvey();" : ""}
-  ${gtmTrigger === "scroll" ? `// Scroll: Show at ${gtmScrollPercent}% scroll depth
-  var scrollTriggered = false;
-  window.addEventListener('scroll', function() {
-    if (scrollTriggered) return;
-    var scrollPercent = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;
-    if (scrollPercent >= CONFIG.scrollPercent) {
-      scrollTriggered = true;
-      showSurvey();
-    }
-  });` : ""}
-  ${gtmTrigger === "time" ? `// Time: Show after ${gtmTimeDelay} seconds
-  setTimeout(showSurvey, CONFIG.timeDelay * 1000);` : ""}
-  ${gtmTrigger === "exit" ? `// Exit Intent: Show when mouse leaves viewport
-  var exitTriggered = false;
-  document.addEventListener('mouseout', function(e) {
-    if (exitTriggered) return;
-    if (e.clientY < 10 && !e.relatedTarget) {
-      exitTriggered = true;
-      showSurvey();
-    }
-  });` : ""}
+  ${triggerCode}
 })();
 </script>
 
@@ -1012,6 +1003,131 @@ window.addEventListener('message', function(e) {
   };
 
   const embedCode = getEmbedCode();
+
+  // Generate GTM-specific code regardless of embed type
+  const getGtmCode = () => {
+    let triggerInstruction = "";
+    if (gtmTrigger === "pageview") triggerInstruction = "→ Use: All Pages or specific Page View trigger";
+    else if (gtmTrigger === "click") triggerInstruction = "→ Use: Click trigger on your target element";
+    else if (gtmTrigger === "scroll") triggerInstruction = "→ Use: Scroll Depth trigger at " + gtmScrollPercent + "%";
+    else if (gtmTrigger === "time") triggerInstruction = "→ Use: Timer trigger with " + gtmTimeDelay + "s interval, limit 1";
+    else if (gtmTrigger === "exit") triggerInstruction = "→ Use: Custom JS variable for exit intent (see below)";
+
+    let triggerCode = "";
+    if (gtmTrigger === "pageview") {
+      triggerCode = "// Pageview: Show immediately\\n  showSurvey();";
+    } else if (gtmTrigger === "click") {
+      triggerCode = "// Click: This tag should be triggered by GTM Click trigger\\n  showSurvey();";
+    } else if (gtmTrigger === "scroll") {
+      triggerCode = "// Scroll: Show at " + gtmScrollPercent + "% scroll depth\\n" +
+        "  var scrollTriggered = false;\\n" +
+        "  window.addEventListener('scroll', function() {\\n" +
+        "    if (scrollTriggered) return;\\n" +
+        "    var scrollPct = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;\\n" +
+        "    if (scrollPct >= CONFIG.scrollPercent) {\\n" +
+        "      scrollTriggered = true;\\n" +
+        "      showSurvey();\\n" +
+        "    }\\n" +
+        "  });";
+    } else if (gtmTrigger === "time") {
+      triggerCode = "// Time: Show after " + gtmTimeDelay + " seconds\\n  setTimeout(showSurvey, CONFIG.timeDelay * 1000);";
+    } else if (gtmTrigger === "exit") {
+      triggerCode = "// Exit Intent: Show when mouse leaves viewport\\n" +
+        "  var exitTriggered = false;\\n" +
+        "  document.addEventListener('mouseout', function(e) {\\n" +
+        "    if (exitTriggered) return;\\n" +
+        "    if (e.clientY < 10 && !e.relatedTarget) {\\n" +
+        "      exitTriggered = true;\\n" +
+        "      showSurvey();\\n" +
+        "    }\\n" +
+        "  });";
+    }
+
+    const slideinPos = slideinPosition === 'bottom-left' ? 'left' : 'right';
+
+    return `<!-- Google Tag Manager Custom HTML Tag -->
+<!--
+  SETUP INSTRUCTIONS:
+  1. In GTM, create a new Tag → Custom HTML
+  2. Paste this entire code block
+  3. Set your trigger based on the selected option below
+
+  Trigger Type: ${gtmTrigger.toUpperCase()}
+  ${triggerInstruction}
+-->
+<script>
+(function() {
+  var CONFIG = {
+    surveyId: '${params.id}',
+    surveyUrl: '${embedUrl}',
+    displayMode: '${gtmDisplayMode}',
+    accentColor: '${embedAccentColor}',
+    trigger: '${gtmTrigger}',
+    scrollPercent: ${gtmScrollPercent},
+    timeDelay: ${gtmTimeDelay},
+    storageKey: 'gtm_survey_${params.id}'
+  };
+
+  if (sessionStorage.getItem(CONFIG.storageKey)) return;
+
+  var styles = '.gtm-survey-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 999999; display: flex; align-items: center; justify-content: center; padding: 20px; opacity: 0; transition: opacity 0.3s; }' +
+    '.gtm-survey-overlay.visible { opacity: 1; }' +
+    '.gtm-survey-modal { background: #fff; border-radius: 16px; max-width: 550px; width: 100%; max-height: 90vh; overflow: hidden; position: relative; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); transform: translateY(20px); transition: transform 0.3s; }' +
+    '.gtm-survey-overlay.visible .gtm-survey-modal { transform: translateY(0); }' +
+    '.gtm-survey-close { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.1); border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 20px; z-index: 10; }' +
+    '.gtm-survey-close:hover { background: rgba(0,0,0,0.2); }' +
+    '.gtm-survey-iframe { width: 100%; height: 500px; border: none; }' +
+    '.gtm-survey-slidein { position: fixed; ${slideinPos}: 20px; bottom: 20px; width: 380px; max-width: calc(100vw - 40px); background: #fff; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); z-index: 999999; overflow: hidden; transform: translateY(100%); opacity: 0; transition: transform 0.4s ease, opacity 0.3s; }' +
+    '.gtm-survey-slidein.visible { transform: translateY(0); opacity: 1; }' +
+    '.gtm-survey-banner { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; box-shadow: 0 -4px 20px rgba(0,0,0,0.15); z-index: 999999; transform: translateY(100%); transition: transform 0.4s ease; }' +
+    '.gtm-survey-banner.visible { transform: translateY(0); }' +
+    '.gtm-survey-banner iframe { width: 100%; height: 400px; border: none; }' +
+    '.gtm-survey-header { background: ' + CONFIG.accentColor + '; color: #fff; padding: 12px 16px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }';
+
+  var styleEl = document.createElement('style');
+  styleEl.textContent = styles;
+  document.head.appendChild(styleEl);
+
+  function showSurvey() {
+    sessionStorage.setItem(CONFIG.storageKey, 'true');
+    if (CONFIG.displayMode === 'popup') {
+      var overlay = document.createElement('div');
+      overlay.className = 'gtm-survey-overlay';
+      overlay.innerHTML = '<div class="gtm-survey-modal"><button class="gtm-survey-close" onclick="this.closest(\\'.gtm-survey-overlay\\').remove()">&times;</button><iframe class="gtm-survey-iframe" src="' + CONFIG.surveyUrl + '" allow="clipboard-write"></iframe></div>';
+      document.body.appendChild(overlay);
+      document.body.style.overflow = 'hidden';
+      setTimeout(function() { overlay.classList.add('visible'); }, 10);
+      overlay.onclick = function(e) { if (e.target === overlay) { overlay.remove(); document.body.style.overflow = ''; } };
+    } else if (CONFIG.displayMode === 'slidein') {
+      var slidein = document.createElement('div');
+      slidein.className = 'gtm-survey-slidein';
+      slidein.innerHTML = '<div class="gtm-survey-header"><span>Quick Feedback</span><button onclick="this.closest(\\'.gtm-survey-slidein\\').remove()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&times;</button></div><iframe style="width:100%;height:450px;border:none;" src="' + CONFIG.surveyUrl + '" allow="clipboard-write"></iframe>';
+      document.body.appendChild(slidein);
+      setTimeout(function() { slidein.classList.add('visible'); }, 10);
+    } else if (CONFIG.displayMode === 'banner') {
+      var banner = document.createElement('div');
+      banner.className = 'gtm-survey-banner';
+      banner.innerHTML = '<div class="gtm-survey-header"><span>We\\'d love your feedback!</span><button onclick="this.closest(\\'.gtm-survey-banner\\').remove()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&times;</button></div><iframe style="width:100%;height:400px;border:none;" src="' + CONFIG.surveyUrl + '" allow="clipboard-write"></iframe>';
+      document.body.appendChild(banner);
+      setTimeout(function() { banner.classList.add('visible'); }, 10);
+    }
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'survey:completed') {
+        window.dataLayer = window.dataLayer || [];
+        window.dataLayer.push({ event: 'surveyCompleted', surveyId: CONFIG.surveyId });
+        setTimeout(function() {
+          var els = document.querySelectorAll('.gtm-survey-overlay, .gtm-survey-slidein, .gtm-survey-banner');
+          for (var i = 0; i < els.length; i++) { els[i].parentNode.removeChild(els[i]); }
+          document.body.style.overflow = '';
+        }, 2000);
+      }
+    });
+  }
+
+  ${triggerCode}
+})();
+</script>`;
+  };
 
   const copyEmbedCode = async () => {
     await navigator.clipboard.writeText(embedCode);
@@ -1310,41 +1426,56 @@ window.addEventListener('message', function(e) {
           )}
         </AnimatePresence>
 
-        {/* Share Link */}
+        {/* Main Distribution Interface - Vertical Tabs */}
         <motion.div variants={cardVariants}>
           <Card className="mb-6">
-            <CardHeader
-              className="cursor-pointer select-none"
-              onClick={() => setShareExpanded(!shareExpanded)}
-            >
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <LinkIcon className="w-5 h-5" />
-                  Share Link
-                </CardTitle>
-                <motion.div
-                  animate={{ rotate: shareExpanded ? 180 : 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <ChevronDown className="w-5 h-5 text-[#6b6b7b]" />
-                </motion.div>
+            <div className="flex min-h-[600px]">
+              {/* Vertical Tab Navigation */}
+              <div className="w-48 border-r border-[#dcd6f6] p-4 flex flex-col gap-1">
+                {[
+                  { id: "link", label: "Link", icon: LinkIcon, desc: "Direct URL & QR" },
+                  { id: "website", label: "Website", icon: Code, desc: "Embed on site" },
+                  { id: "email", label: "Email", icon: Mail, desc: "Send invitations" },
+                  { id: "alerts", label: "Alerts", icon: Bell, desc: "Webhooks & triggers" },
+                ].map(({ id, label, icon: Icon, desc }) => (
+                  <button
+                    key={id}
+                    onClick={() => setActiveTab(id as typeof activeTab)}
+                    className={`flex items-start gap-3 p-3 rounded-lg text-left transition-all ${
+                      activeTab === id
+                        ? "bg-[#FF4F01] text-white"
+                        : "hover:bg-[#fbf5ea] text-[#6b6b7b]"
+                    }`}
+                  >
+                    <Icon className="w-5 h-5 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-sm">{label}</p>
+                      <p className={`text-xs ${activeTab === id ? "text-white/70" : "text-[#9b9bab]"}`}>{desc}</p>
+                    </div>
+                  </button>
+                ))}
               </div>
-              <CardDescription>
-                {survey.accessType === "INVITE_ONLY"
-                  ? "Only invited emails can respond to this survey"
-                  : "Anyone with this link can respond to your survey"}
-              </CardDescription>
-            </CardHeader>
-            <AnimatePresence initial={false}>
-              {shareExpanded && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  style={{ overflow: "hidden" }}
-                >
-                  <CardContent>
+
+              {/* Tab Content */}
+              <div className="flex-1 p-6">
+                <AnimatePresence mode="wait">
+                  {/* LINK TAB */}
+                  {activeTab === "link" && (
+                    <motion.div
+                      key="link"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <div className="mb-6">
+                        <h2 className="font-['Syne'] font-semibold text-lg mb-1">Share Link</h2>
+                        <p className="text-sm text-[#6b6b7b]">
+                          {survey.accessType === "INVITE_ONLY"
+                            ? "Only invited emails can respond to this survey"
+                            : "Anyone with this link can respond to your survey"}
+                        </p>
+                      </div>
               <div className="flex gap-2">
                 <Input value={surveyUrl} readOnly className="bg-white" />
                 <motion.div
@@ -1516,80 +1647,157 @@ window.addEventListener('message', function(e) {
                   )}
                 </div>
               )}
-            </div>
-          </CardContent>
-                </motion.div>
-              )}
-            </AnimatePresence>
-        </Card>
+                    </div>
+                    </motion.div>
+                  )}
 
-        {/* Embed Code */}
-        <motion.div variants={cardVariants}>
-          <Card className="mb-6">
-            <CardHeader
-              className="cursor-pointer select-none"
-              onClick={() => setEmbedExpanded(!embedExpanded)}
-            >
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Code className="w-5 h-5" />
-                  Embed Code
-                </CardTitle>
-                <motion.div
-                  animate={{ rotate: embedExpanded ? 180 : 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <ChevronDown className="w-5 h-5 text-[#6b6b7b]" />
-                </motion.div>
-              </div>
-              <CardDescription>
-                Embed this survey on your website or app
-              </CardDescription>
-            </CardHeader>
-            <AnimatePresence initial={false}>
-              {embedExpanded && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  style={{ overflow: "hidden" }}
-                >
-                  <CardContent>
-              <div className="space-y-4">
-                {/* Embed Type Tabs */}
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { id: "iframe", label: "Inline", icon: Square, desc: "Embed directly on page" },
-                    { id: "popup", label: "Popup", icon: MousePointerClick, desc: "Button opens modal" },
-                    { id: "slidein", label: "Slide-in", icon: MessageSquare, desc: "Floating button at corner" },
-                    { id: "feedback-tab", label: "Feedback Tab", icon: MessageSquare, desc: "Side tab like Hotjar" },
-                    { id: "widget", label: "Widget", icon: Puzzle, desc: "JavaScript widget" },
-                    { id: "exit-intent", label: "Exit Intent", icon: LogOut, desc: "Show when leaving" },
-                    { id: "gtm", label: "GTM", icon: Tag, desc: "Google Tag Manager" },
-                  ].map(({ id, label, icon: Icon, desc }) => (
-                    <button
-                      key={id}
-                      onClick={() => setEmbedType(id as typeof embedType)}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all text-left ${
-                        embedType === id
-                          ? "bg-[#FF4F01] text-white border-[#FF4F01]"
-                          : "bg-white text-[#6b6b7b] border-[#dcd6f6] hover:border-[#FF4F01]"
-                      }`}
+                  {/* WEBSITE TAB */}
+                  {activeTab === "website" && (
+                    <motion.div
+                      key="website"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.2 }}
                     >
-                      <Icon className="w-4 h-4" />
-                      <div>
-                        <p className="text-sm font-medium">{label}</p>
-                        <p className={`text-xs ${embedType === id ? "text-white/80" : "text-[#9b9bab]"}`}>{desc}</p>
+                      {/* Step Navigation */}
+                      <div className="mb-6">
+                        <div className="flex items-center gap-4 mb-4">
+                          {[
+                            { id: "gallery", label: "1. Choose Type", active: websiteStep === "gallery" },
+                            { id: "configure", label: "2. Configure", active: websiteStep === "configure" },
+                            { id: "install", label: "3. Install", active: websiteStep === "install" },
+                          ].map(({ id, label, active }, index) => (
+                            <button
+                              key={id}
+                              onClick={() => setWebsiteStep(id as typeof websiteStep)}
+                              className={`flex items-center gap-2 text-sm font-medium transition-colors ${
+                                active ? "text-[#FF4F01]" : "text-[#6b6b7b] hover:text-[#1a1a2e]"
+                              }`}
+                            >
+                              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
+                                active ? "bg-[#FF4F01] text-white" : "bg-[#dcd6f6] text-[#6b6b7b]"
+                              }`}>{index + 1}</span>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </button>
-                  ))}
-                </div>
+
+                      {/* Step 1: Gallery - Choose Embed Type */}
+                      {websiteStep === "gallery" && (
+                        <div className="space-y-6">
+                          {/* Overlays Category */}
+                          <div>
+                            <h3 className="text-sm font-medium text-[#1a1a2e] mb-3 flex items-center gap-2">
+                              <MousePointerClick className="w-4 h-4" />
+                              Overlays
+                              <span className="text-xs text-[#9b9bab] font-normal">– Appear on top of your page</span>
+                            </h3>
+                            <div className="grid grid-cols-2 gap-3">
+                              {[
+                                { id: "popup", label: "Popup Modal", icon: MousePointerClick, desc: "Button opens centered modal" },
+                                { id: "slidein", label: "Slide-in", icon: MessageSquare, desc: "Floating corner button" },
+                                { id: "feedback-tab", label: "Feedback Tab", icon: MessageSquare, desc: "Side tab like Hotjar" },
+                                { id: "exit-intent", label: "Exit Intent", icon: LogOut, desc: "Shows when leaving page" },
+                              ].map(({ id, label, icon: Icon, desc }) => (
+                                <button
+                                  key={id}
+                                  onClick={() => {
+                                    setEmbedType(id as typeof embedType);
+                                    setWebsiteStep("configure");
+                                  }}
+                                  className={`flex items-start gap-3 p-4 rounded-lg border-2 transition-all text-left hover:border-[#FF4F01] ${
+                                    embedType === id ? "border-[#FF4F01] bg-[#FF4F01]/5" : "border-[#dcd6f6]"
+                                  }`}
+                                >
+                                  <Icon className="w-5 h-5 text-[#FF4F01] mt-0.5" />
+                                  <div>
+                                    <p className="font-medium text-sm text-[#1a1a2e]">{label}</p>
+                                    <p className="text-xs text-[#6b6b7b] mt-0.5">{desc}</p>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Inline Category */}
+                          <div>
+                            <h3 className="text-sm font-medium text-[#1a1a2e] mb-3 flex items-center gap-2">
+                              <Square className="w-4 h-4" />
+                              Inline
+                              <span className="text-xs text-[#9b9bab] font-normal">– Embedded within your page</span>
+                            </h3>
+                            <div className="grid grid-cols-2 gap-3">
+                              {[
+                                { id: "iframe", label: "Inline Embed", icon: Square, desc: "Direct iframe on page" },
+                                { id: "widget", label: "Widget", icon: Puzzle, desc: "JavaScript widget loader" },
+                              ].map(({ id, label, icon: Icon, desc }) => (
+                                <button
+                                  key={id}
+                                  onClick={() => {
+                                    setEmbedType(id as typeof embedType);
+                                    setWebsiteStep("configure");
+                                  }}
+                                  className={`flex items-start gap-3 p-4 rounded-lg border-2 transition-all text-left hover:border-[#FF4F01] ${
+                                    embedType === id ? "border-[#FF4F01] bg-[#FF4F01]/5" : "border-[#dcd6f6]"
+                                  }`}
+                                >
+                                  <Icon className="w-5 h-5 text-[#FF4F01] mt-0.5" />
+                                  <div>
+                                    <p className="font-medium text-sm text-[#1a1a2e]">{label}</p>
+                                    <p className="text-xs text-[#6b6b7b] mt-0.5">{desc}</p>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Step 2: Configure */}
+                      {websiteStep === "configure" && (
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="font-medium text-[#1a1a2e]">
+                              Configure {embedType === "iframe" ? "Inline Embed" : embedType === "popup" ? "Popup Modal" : embedType === "slidein" ? "Slide-in" : embedType === "feedback-tab" ? "Feedback Tab" : embedType === "widget" ? "Widget" : "Exit Intent"}
+                            </h3>
+                            <button
+                              onClick={() => setWebsiteStep("gallery")}
+                              className="text-xs text-[#6b6b7b] hover:text-[#FF4F01]"
+                            >
+                              ← Change type
+                            </button>
+                          </div>
 
                 {/* Common Options: Colors */}
                 <div className="grid grid-cols-2 gap-4 pt-2">
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Background Color</label>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium">Background Color</label>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => setEmbedBgGradient(false)}
+                          className={`px-3 py-1 text-xs font-medium rounded-l transition-all ${
+                            !embedBgGradient
+                              ? "bg-[#1a1a2e] text-white"
+                              : "bg-white text-[#6b6b7b] border border-[#dcd6f6]"
+                          }`}
+                        >
+                          Solid
+                        </button>
+                        <button
+                          onClick={() => setEmbedBgGradient(true)}
+                          className={`px-3 py-1 text-xs font-medium rounded-r transition-all ${
+                            embedBgGradient
+                              ? "bg-[#1a1a2e] text-white"
+                              : "bg-white text-[#6b6b7b] border border-[#dcd6f6]"
+                          }`}
+                        >
+                          Gradient
+                        </button>
+                      </div>
+                    </div>
                     <div className="flex gap-2">
                       <input
                         type="color"
@@ -1601,8 +1809,40 @@ window.addEventListener('message', function(e) {
                         value={embedBgColor}
                         onChange={(e) => setEmbedBgColor(e.target.value)}
                         className="flex-1"
+                        placeholder="Color 1"
                       />
                     </div>
+                    {embedBgGradient && (
+                      <>
+                        <div className="flex gap-2">
+                          <input
+                            type="color"
+                            value={embedBgColor2}
+                            onChange={(e) => setEmbedBgColor2(e.target.value)}
+                            className="w-10 h-10 rounded border border-[#dcd6f6] cursor-pointer"
+                          />
+                          <Input
+                            value={embedBgColor2}
+                            onChange={(e) => setEmbedBgColor2(e.target.value)}
+                            className="flex-1"
+                            placeholder="Color 2"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-[#6b6b7b] mb-1 block">Direction</label>
+                          <select
+                            value={embedGradientDirection}
+                            onChange={(e) => setEmbedGradientDirection(e.target.value as "to-br" | "to-r" | "to-b" | "to-tr")}
+                            className="w-full px-3 py-2 text-sm border border-[#dcd6f6] rounded-md bg-white"
+                          >
+                            <option value="to-r">Left to Right →</option>
+                            <option value="to-b">Top to Bottom ↓</option>
+                            <option value="to-br">Diagonal ↘</option>
+                            <option value="to-tr">Diagonal ↗</option>
+                          </select>
+                        </div>
+                      </>
+                    )}
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-2 block">Accent Color</label>
@@ -2077,7 +2317,7 @@ window.addEventListener('message', function(e) {
                             style={{
                               width: embedWidth.includes("%") ? embedWidth : `${Math.min(parseInt(embedWidth) || 400, 400)}px`,
                               height: `${Math.min(parseInt(embedHeight) || 200, 200)}px`,
-                              background: embedBgColor,
+                              background: previewBgStyle,
                             }}
                           >
                             <div className="h-full flex items-center justify-center text-xs text-[#6b6b7b]">
@@ -2159,7 +2399,7 @@ window.addEventListener('message', function(e) {
                               width: "100%",
                               maxWidth: "400px",
                               height: "180px",
-                              background: embedBgColor,
+                              background: previewBgStyle,
                             }}
                           >
                             <div className="h-full flex items-center justify-center text-xs text-[#6b6b7b]">
@@ -2183,7 +2423,7 @@ window.addEventListener('message', function(e) {
                               </div>
                               <div
                                 className="p-4 text-center text-xs"
-                                style={{ background: embedBgColor }}
+                                style={{ background: previewBgStyle }}
                               >
                                 Survey appears here
                               </div>
@@ -2191,12 +2431,66 @@ window.addEventListener('message', function(e) {
                           </div>
                         )}
 
-                        {/* GTM preview */}
-                        {embedType === "gtm" && (
-                          <div className="text-center p-4">
-                            <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#f0f0f0] rounded-lg text-xs text-[#6b6b7b]">
-                              <Tag className="w-4 h-4" />
-                              GTM triggers {gtmDisplayMode} on {gtmTrigger}
+                        {/* GTM preview - show based on display mode */}
+                        {embedType === "gtm" && gtmDisplayMode === "popup" && (
+                          <div className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-b-lg">
+                            <div className="bg-white rounded-lg shadow-xl max-w-xs w-full mx-4 overflow-hidden">
+                              <div
+                                className="p-3 text-white text-center text-xs font-semibold"
+                                style={{ background: embedAccentColor }}
+                              >
+                                Survey Popup
+                              </div>
+                              <div
+                                className="p-4 text-center text-xs"
+                                style={{ background: previewBgStyle }}
+                              >
+                                <Tag className="w-4 h-4 mx-auto mb-1 text-[#6b6b7b]" />
+                                <div className="text-[#6b6b7b]">Triggers on: {gtmTrigger}</div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {embedType === "gtm" && gtmDisplayMode === "slidein" && (
+                          <div
+                            className="absolute bottom-3 right-3"
+                          >
+                            <div
+                              className="rounded-lg shadow-lg overflow-hidden"
+                              style={{ width: "180px" }}
+                            >
+                              <div
+                                className="p-2 text-white text-center text-xs font-semibold flex items-center justify-between"
+                                style={{ background: embedAccentColor }}
+                              >
+                                <span>Quick Feedback</span>
+                                <span className="text-white/70">×</span>
+                              </div>
+                              <div
+                                className="p-3 text-center text-xs"
+                                style={{ background: previewBgStyle }}
+                              >
+                                <Tag className="w-3 h-3 mx-auto mb-1 text-[#6b6b7b]" />
+                                <div className="text-[#6b6b7b] text-[10px]">GTM: {gtmTrigger}</div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {embedType === "gtm" && gtmDisplayMode === "banner" && (
+                          <div className="absolute bottom-0 left-0 right-0">
+                            <div
+                              className="text-white text-center text-xs font-semibold p-2 flex items-center justify-center gap-2"
+                              style={{ background: embedAccentColor }}
+                            >
+                              <span>We'd love your feedback!</span>
+                              <span className="text-white/70 ml-2">×</span>
+                            </div>
+                            <div
+                              className="p-3 text-center text-xs border-t"
+                              style={{ background: previewBgStyle }}
+                            >
+                              <Tag className="w-3 h-3 mx-auto mb-1 text-[#6b6b7b]" />
+                              <div className="text-[#6b6b7b] text-[10px]">GTM triggers on: {gtmTrigger}</div>
                             </div>
                           </div>
                         )}
@@ -2205,192 +2499,367 @@ window.addEventListener('message', function(e) {
                   </div>
                 </div>
 
-                {/* Embed Code */}
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Generated Code</label>
-                  <div className="relative">
-                    <pre className="bg-[#1a1a2e] text-white p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap max-h-80">
-                      <code>{embedCode}</code>
-                    </pre>
-                    <motion.div
-                      className="absolute top-2 right-2"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={copyEmbedCode}
-                        className="bg-white/10 hover:bg-white/20 text-white"
-                      >
-                        <AnimatePresence mode="wait">
-                          {embedCopied ? (
-                            <motion.div
-                              key="check"
-                              initial={{ scale: 0, rotate: -180 }}
-                              animate={{ scale: 1, rotate: 0 }}
-                              exit={{ scale: 0, rotate: 180 }}
-                              transition={{ type: "spring", stiffness: 500, damping: 25 }}
-                              className="flex items-center gap-1"
+                          {/* Continue to Install Button */}
+                          <div className="flex justify-end pt-4 border-t border-[#dcd6f6] mt-6">
+                            <Button onClick={() => setWebsiteStep("install")}>
+                              Continue to Install →
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Step 3: Install */}
+                      {websiteStep === "install" && (
+                        <div className="space-y-6">
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="font-medium text-[#1a1a2e]">Install on Your Website</h3>
+                            <button
+                              onClick={() => setWebsiteStep("configure")}
+                              className="text-xs text-[#6b6b7b] hover:text-[#FF4F01]"
                             >
-                              <Check className="w-4 h-4 text-green-400" />
-                              <span>Copied!</span>
-                            </motion.div>
-                          ) : (
-                            <motion.div
-                              key="copy"
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              exit={{ scale: 0 }}
-                              className="flex items-center gap-1"
-                            >
-                              <Copy className="w-4 h-4" />
-                              <span>Copy</span>
-                            </motion.div>
+                              ← Back to Configure
+                            </button>
+                          </div>
+
+                          {/* Install Method Tabs */}
+                          <div className="flex gap-2 p-1 bg-[#fbf5ea] rounded-lg">
+                            {[
+                              { id: "javascript", label: "JavaScript", desc: "Copy & paste code" },
+                              { id: "gtm", label: "Google Tag Manager", desc: "Container tag" },
+                              { id: "wordpress", label: "WordPress", desc: "Plugin or code" },
+                            ].map(({ id, label, desc }) => (
+                              <button
+                                key={id}
+                                onClick={() => setInstallMethod(id as typeof installMethod)}
+                                className={`flex-1 py-3 px-4 rounded-lg text-left transition-all ${
+                                  installMethod === id
+                                    ? "bg-white shadow-sm"
+                                    : "hover:bg-white/50"
+                                }`}
+                              >
+                                <p className={`text-sm font-medium ${installMethod === id ? "text-[#1a1a2e]" : "text-[#6b6b7b]"}`}>{label}</p>
+                                <p className="text-xs text-[#9b9bab]">{desc}</p>
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* JavaScript Install */}
+                          {installMethod === "javascript" && (
+                            <div className="space-y-4">
+                              <p className="text-sm text-[#6b6b7b]">
+                                Copy this code and paste it into your website's HTML where you want the survey to appear.
+                              </p>
+                              <div className="relative">
+                                <pre className="bg-[#1a1a2e] text-white p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap max-h-80">
+                                  <code>{embedCode}</code>
+                                </pre>
+                                <motion.div
+                                  className="absolute top-2 right-2"
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                >
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={copyEmbedCode}
+                                    className="bg-white/10 hover:bg-white/20 text-white"
+                                  >
+                                    <AnimatePresence mode="wait">
+                                      {embedCopied ? (
+                                        <motion.div
+                                          key="check"
+                                          initial={{ scale: 0, rotate: -180 }}
+                                          animate={{ scale: 1, rotate: 0 }}
+                                          exit={{ scale: 0, rotate: 180 }}
+                                          transition={{ type: "spring", stiffness: 500, damping: 25 }}
+                                          className="flex items-center gap-1"
+                                        >
+                                          <Check className="w-4 h-4 text-green-400" />
+                                          <span>Copied!</span>
+                                        </motion.div>
+                                      ) : (
+                                        <motion.div
+                                          key="copy"
+                                          initial={{ scale: 0 }}
+                                          animate={{ scale: 1 }}
+                                          exit={{ scale: 0 }}
+                                          className="flex items-center gap-1"
+                                        >
+                                          <Copy className="w-4 h-4" />
+                                          <span>Copy</span>
+                                        </motion.div>
+                                      )}
+                                    </AnimatePresence>
+                                  </Button>
+                                </motion.div>
+                              </div>
+                            </div>
                           )}
-                        </AnimatePresence>
-                      </Button>
+
+                          {/* GTM Install */}
+                          {installMethod === "gtm" && (
+                            <div className="space-y-4">
+                              <div className="p-4 bg-[#fbf5ea] rounded-lg space-y-3">
+                                <p className="text-sm font-medium text-[#1a1a2e]">GTM Trigger Settings</p>
+                                <p className="text-xs text-[#6b6b7b]">
+                                  Configure when the survey should appear, then copy the Custom HTML tag code.
+                                </p>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <label className="text-xs text-[#6b6b7b] mb-1 block">Trigger Type</label>
+                                    <select
+                                      value={gtmTrigger}
+                                      onChange={(e) => setGtmTrigger(e.target.value as typeof gtmTrigger)}
+                                      className="w-full px-3 py-2 text-sm border border-[#dcd6f6] rounded-md bg-white"
+                                    >
+                                      <option value="pageview">Page View</option>
+                                      <option value="click">Button Click</option>
+                                      <option value="scroll">Scroll Depth</option>
+                                      <option value="time">Time on Page</option>
+                                      <option value="exit">Exit Intent</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="text-xs text-[#6b6b7b] mb-1 block">Display Mode</label>
+                                    <select
+                                      value={gtmDisplayMode}
+                                      onChange={(e) => setGtmDisplayMode(e.target.value as typeof gtmDisplayMode)}
+                                      className="w-full px-3 py-2 text-sm border border-[#dcd6f6] rounded-md bg-white"
+                                    >
+                                      <option value="popup">Popup Modal</option>
+                                      <option value="slidein">Slide-in Panel</option>
+                                      <option value="banner">Top Banner</option>
+                                    </select>
+                                  </div>
+                                </div>
+                                {gtmTrigger === "scroll" && (
+                                  <div>
+                                    <label className="text-xs text-[#6b6b7b] mb-1 block">Scroll Percentage</label>
+                                    <Input
+                                      type="number"
+                                      min="1"
+                                      max="100"
+                                      value={gtmScrollPercent}
+                                      onChange={(e) => setGtmScrollPercent(e.target.value)}
+                                      className="w-24"
+                                    />
+                                  </div>
+                                )}
+                                {gtmTrigger === "time" && (
+                                  <div>
+                                    <label className="text-xs text-[#6b6b7b] mb-1 block">Delay (seconds)</label>
+                                    <Input
+                                      type="number"
+                                      min="1"
+                                      value={gtmTimeDelay}
+                                      onChange={(e) => setGtmTimeDelay(e.target.value)}
+                                      className="w-24"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="relative">
+                                <pre className="bg-[#1a1a2e] text-white p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap max-h-80">
+                                  <code>{getGtmCode()}</code>
+                                </pre>
+                                <motion.div
+                                  className="absolute top-2 right-2"
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                >
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(getGtmCode());
+                                      setEmbedCopied(true);
+                                      setTimeout(() => setEmbedCopied(false), 2000);
+                                    }}
+                                    className="bg-white/10 hover:bg-white/20 text-white"
+                                  >
+                                    <Copy className="w-4 h-4 mr-1" />
+                                    Copy GTM Code
+                                  </Button>
+                                </motion.div>
+                              </div>
+                              <div className="p-3 bg-blue-50 rounded-lg text-xs text-blue-700">
+                                <strong>Setup in GTM:</strong> Create a new Custom HTML tag, paste this code, then set up your trigger based on the settings above.
+                              </div>
+                            </div>
+                          )}
+
+                          {/* WordPress Install */}
+                          {installMethod === "wordpress" && (
+                            <div className="space-y-4">
+                              <p className="text-sm text-[#6b6b7b]">
+                                Add this code to your WordPress site using a Custom HTML block, widget, or your theme's code editor.
+                              </p>
+                              <div className="relative">
+                                <pre className="bg-[#1a1a2e] text-white p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap max-h-80">
+                                  <code>{embedCode}</code>
+                                </pre>
+                                <motion.div
+                                  className="absolute top-2 right-2"
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                >
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={copyEmbedCode}
+                                    className="bg-white/10 hover:bg-white/20 text-white"
+                                  >
+                                    <Copy className="w-4 h-4 mr-1" />
+                                    Copy Code
+                                  </Button>
+                                </motion.div>
+                              </div>
+                              <div className="p-3 bg-amber-50 rounded-lg text-xs text-amber-700">
+                                <strong>Tip:</strong> For page builder plugins (Elementor, Divi, etc.), use a Custom HTML or Code widget to add this embed code.
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Preview Link */}
+                          <div className="flex items-center gap-2 pt-4 border-t border-[#dcd6f6]">
+                            <Link href={`/embed/${params.id}`} target="_blank">
+                              <Button variant="outline" size="sm">
+                                <Eye className="w-4 h-4 mr-2" />
+                                Preview Embed
+                              </Button>
+                            </Link>
+                            <p className="text-xs text-[#6b6b7b]">
+                              Opens the embeddable version in a new tab
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </motion.div>
-                  </div>
-                </div>
+                  )}
 
-                {/* Preview Link */}
-                <div className="flex items-center gap-2 pt-2">
-                  <Link href={`/embed/${params.id}`} target="_blank">
-                    <Button variant="outline" size="sm">
-                      <Eye className="w-4 h-4 mr-2" />
-                      Preview Embed
-                    </Button>
-                  </Link>
-                  <p className="text-xs text-[#6b6b7b]">
-                    Opens the embeddable version in a new tab
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </Card>
-        </motion.div>
-
-        {/* Email Groups */}
-        <Card className="mb-6">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="w-5 h-5" />
-                  Email Groups
-                </CardTitle>
-                <CardDescription>
-                  Create reusable groups to quickly send to your team
-                </CardDescription>
-              </div>
-              <Button variant="outline" size="sm" onClick={openNewGroup}>
-                <Plus className="w-4 h-4 mr-2" />
-                New Group
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {groups.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="w-12 h-12 rounded-full bg-[#dcd6f6] flex items-center justify-center mx-auto mb-3">
-                  <FolderPlus className="w-6 h-6 text-[#1a1a2e]" />
-                </div>
-                <p className="text-[#6b6b7b] text-sm mb-3">No groups yet</p>
-                <Button variant="outline" size="sm" onClick={openNewGroup}>
-                  Create your first group
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {groups.map((group) => (
-                  <div
-                    key={group.id}
-                    className={`flex items-center justify-between p-3 rounded-lg border transition-all cursor-pointer ${
-                      selectedGroups.includes(group.id)
-                        ? "border-[#FF4F01] bg-[#FF4F01]/5"
-                        : "border-[#dcd6f6] hover:border-[#c9c1ed]"
-                    }`}
-                    onClick={() => toggleGroup(group.id)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: group.color || GROUP_COLORS[0] }}
-                      />
-                      <div>
-                        <p className="font-medium text-sm">{group.name}</p>
-                        <p className="text-xs text-[#6b6b7b]">
-                          {group._count.members} member{group._count.members !== 1 ? "s" : ""}
+                  {/* EMAIL TAB */}
+                  {activeTab === "email" && (
+                    <motion.div
+                      key="email"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.2 }}
+                      className="space-y-8"
+                    >
+                      <div className="mb-8">
+                        <h2 className="font-['Syne'] font-semibold text-lg mb-2">Email Invitations</h2>
+                        <p className="text-sm text-[#6b6b7b]">
+                          Send survey invitations directly to recipients
                         </p>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {selectedGroups.includes(group.id) && (
-                        <Badge variant="highlight" className="text-xs">
-                          Selected
-                        </Badge>
-                      )}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditGroup(group);
-                        }}
-                        className="p-1.5 hover:bg-[#dcd6f6] rounded transition-colors"
-                      >
-                        <Edit3 className="w-3.5 h-3.5 text-[#6b6b7b]" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteGroup(group.id);
-                        }}
-                        className="p-1.5 hover:bg-red-100 rounded transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {selectedGroups.length > 0 && (
-                  <p className="text-xs text-[#FF4F01] mt-2">
-                    {totalSelectedEmails} email{totalSelectedEmails !== 1 ? "s" : ""} selected from groups
-                  </p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
 
-        {/* Email Preview & Customization */}
-        <Card className="mb-6">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Eye className="w-5 h-5" />
-                  Email Template
-                </CardTitle>
-                <CardDescription>
-                  Customize and preview your invitation email
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowEmailPreview(!showEmailPreview)}
-              >
-                {showEmailPreview ? "Hide Preview" : "Show Preview"}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-2">
+                      {/* Email Groups */}
+                      <div className="space-y-5">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="font-medium text-sm text-[#1a1a2e] flex items-center gap-2">
+                              <Users className="w-4 h-4" />
+                              Email Groups
+                            </h3>
+                            <p className="text-xs text-[#6b6b7b]">Create reusable groups to quickly send to your team</p>
+                          </div>
+                          <Button variant="outline" size="sm" onClick={openNewGroup}>
+                            <Plus className="w-4 h-4 mr-2" />
+                            New Group
+                          </Button>
+                        </div>
+                        {groups.length === 0 ? (
+                          <div className="text-center py-8">
+                            <div className="w-12 h-12 rounded-full bg-[#dcd6f6] flex items-center justify-center mx-auto mb-3">
+                              <FolderPlus className="w-6 h-6 text-[#1a1a2e]" />
+                            </div>
+                            <p className="text-[#6b6b7b] text-sm mb-3">No groups yet</p>
+                            <Button variant="outline" size="sm" onClick={openNewGroup}>
+                              Create your first group
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {groups.map((group) => (
+                              <div
+                                key={group.id}
+                                className={`flex items-center justify-between p-3 rounded-lg border transition-all cursor-pointer ${
+                                  selectedGroups.includes(group.id)
+                                    ? "border-[#FF4F01] bg-[#FF4F01]/5"
+                                    : "border-[#dcd6f6] hover:border-[#c9c1ed]"
+                                }`}
+                                onClick={() => toggleGroup(group.id)}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className="w-3 h-3 rounded-full"
+                                    style={{ backgroundColor: group.color || GROUP_COLORS[0] }}
+                                  />
+                                  <div>
+                                    <p className="font-medium text-sm">{group.name}</p>
+                                    <p className="text-xs text-[#6b6b7b]">
+                                      {group._count.members} member{group._count.members !== 1 ? "s" : ""}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {selectedGroups.includes(group.id) && (
+                                    <Badge variant="highlight" className="text-xs">
+                                      Selected
+                                    </Badge>
+                                  )}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openEditGroup(group);
+                                    }}
+                                    className="p-1.5 hover:bg-[#dcd6f6] rounded transition-colors"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5 text-[#6b6b7b]" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteGroup(group.id);
+                                    }}
+                                    className="p-1.5 hover:bg-red-100 rounded transition-colors"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                            {selectedGroups.length > 0 && (
+                              <p className="text-xs text-[#FF4F01] mt-2">
+                                {totalSelectedEmails} email{totalSelectedEmails !== 1 ? "s" : ""} selected from groups
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Email Template Customization */}
+                      <div className="space-y-6 pt-8 border-t border-[#dcd6f6]">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="font-medium text-sm text-[#1a1a2e] flex items-center gap-2">
+                              <Eye className="w-4 h-4" />
+                              Email Template
+                            </h3>
+                            <p className="text-xs text-[#6b6b7b]">Customize your invitation email</p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowEmailPreview(!showEmailPreview)}
+                          >
+                            {showEmailPreview ? "Hide Preview" : "Show Preview"}
+                          </Button>
+                        </div>
+                        <div className="grid gap-6 md:grid-cols-2">
               {/* Customization Fields */}
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div>
                   <label className="text-sm font-medium mb-2 block">Subject Line</label>
                   <Input
@@ -2505,25 +2974,20 @@ window.addEventListener('message', function(e) {
                     </p>
                   </div>
                 </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-        </motion.div>
+                        )}
+                        </div>
+                      </div>
 
-        {/* Email Invitations */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Mail className="w-5 h-5" />
-              Send Invitations
-            </CardTitle>
-            <CardDescription>
-              Add individual emails or use groups above
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Textarea
+                      {/* Send Invitations */}
+                      <div className="space-y-4 pt-6 border-t border-[#dcd6f6]">
+                        <div>
+                          <h3 className="font-medium text-sm text-[#1a1a2e] flex items-center gap-2 mb-2">
+                            <Send className="w-4 h-4" />
+                            Send Invitations
+                          </h3>
+                          <p className="text-xs text-[#6b6b7b] mb-3">Add individual emails or use groups above</p>
+                        </div>
+                        <Textarea
               value={emails}
               onChange={(e) => setEmails(e.target.value)}
               placeholder="Enter additional email addresses (separated by commas or new lines)"
@@ -2563,65 +3027,76 @@ window.addEventListener('message', function(e) {
                     </span>
                   )}
                 </>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
+                        )}
+                      </Button>
+                      </div>
 
-        {/* Invitation History */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Invitation History</CardTitle>
-            <CardDescription>
-              {invitations.length} invitation{invitations.length !== 1 ? "s" : ""} sent
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {invitations.length === 0 ? (
-              <p className="text-[#6b6b7b] text-sm py-4 text-center">
-                No invitations sent yet
-              </p>
-            ) : (
-              <div className="space-y-3 max-h-80 overflow-y-auto">
-                {invitations.map((inv) => (
-                  <div
-                    key={inv.id}
-                    className="flex items-center justify-between p-3 bg-[#fbf5ea] rounded-lg"
-                  >
-                    <div>
-                      <p className="font-medium text-sm">{inv.email}</p>
-                      <p className="text-xs text-[#6b6b7b]">
-                        Sent {new Date(inv.sentAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {inv.completedAt ? (
-                        <Badge variant="highlight" className="flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" />
-                          Completed
-                        </Badge>
-                      ) : inv.openedAt ? (
-                        <Badge variant="secondary" className="flex items-center gap-1">
-                          <Eye className="w-3 h-3" />
-                          Opened
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          Pending
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                      {/* Invitation History */}
+                      <div className="space-y-4 pt-6 border-t border-[#dcd6f6]">
+                        <div>
+                          <h3 className="font-medium text-sm text-[#1a1a2e] mb-1">Invitation History</h3>
+                          <p className="text-xs text-[#6b6b7b]">
+                            {invitations.length} invitation{invitations.length !== 1 ? "s" : ""} sent
+                          </p>
+                        </div>
+                        {invitations.length === 0 ? (
+                          <p className="text-[#6b6b7b] text-sm py-4 text-center">
+                            No invitations sent yet
+                          </p>
+                        ) : (
+                          <div className="space-y-3 max-h-80 overflow-y-auto">
+                            {invitations.map((inv) => (
+                              <div
+                                key={inv.id}
+                                className="flex items-center justify-between p-3 bg-[#fbf5ea] rounded-lg"
+                              >
+                                <div>
+                                  <p className="font-medium text-sm">{inv.email}</p>
+                                  <p className="text-xs text-[#6b6b7b]">
+                                    Sent {new Date(inv.sentAt).toLocaleDateString()}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {inv.completedAt ? (
+                                    <Badge variant="highlight" className="flex items-center gap-1">
+                                      <CheckCircle className="w-3 h-3" />
+                                      Completed
+                                    </Badge>
+                                  ) : inv.openedAt ? (
+                                    <Badge variant="secondary" className="flex items-center gap-1">
+                                      <Eye className="w-3 h-3" />
+                                      Opened
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="flex items-center gap-1">
+                                      <Clock className="w-3 h-3" />
+                                      Pending
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* ALERTS TAB */}
+                  {activeTab === "alerts" && (
+                    <AlertsTab
+                      surveyId={survey.id}
+                      questions={survey.questions || []}
+                    />
+                  )}
+                </AnimatePresence>
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </motion.div>
+            </div>
+          </Card>
+        </motion.div>
 
-      {/* Group Modal */}
-      <AnimatePresence>
+        {/* Group Modal */}
+        <AnimatePresence>
         {showGroupModal && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -2720,8 +3195,9 @@ window.addEventListener('message', function(e) {
             </div>
           </motion.div>
         </motion.div>
-      )}
-      </AnimatePresence>
+        )}
+        </AnimatePresence>
+      </motion.div>
     </div>
   );
 }

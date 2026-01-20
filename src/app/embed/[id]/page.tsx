@@ -1,8 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import {
+  pipeAnswers,
+  evaluateBranchLogic,
+  filterOptions,
+  BranchLogic,
+  OptionSource,
+} from "@/lib/conditional-logic";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -83,6 +90,8 @@ interface Question {
   options?: string[];
   settings?: {
     skipLogic?: SkipLogic;
+    branchLogic?: BranchLogic;
+    optionSource?: OptionSource;
     scaleMin?: number;
     scaleMax?: number;
     scaleLabels?: Record<number, string>;
@@ -137,6 +146,25 @@ export default function EmbedSurveyPage() {
   const hideTitle = searchParams.get("hideTitle") === "true";
   const hideDescription = searchParams.get("hideDescription") === "true";
   const accentColor = searchParams.get("accent") || "#FF4F01";
+  const isGradient = searchParams.get("gradient") === "true";
+  const bgColor2 = searchParams.get("bg2") || "#dcd6f6";
+  const gradientDir = searchParams.get("gradientDir") || "to-br";
+
+  // Convert gradient direction to CSS
+  const getGradientDirection = (dir: string) => {
+    switch (dir) {
+      case "to-r": return "to right";
+      case "to-b": return "to bottom";
+      case "to-br": return "to bottom right";
+      case "to-tr": return "to top right";
+      default: return "to bottom right";
+    }
+  };
+
+  // Generate background style (solid or gradient)
+  const bgStyle = isGradient
+    ? `linear-gradient(${getGradientDirection(gradientDir)}, ${bgColor}, ${bgColor2})`
+    : bgColor;
 
   // Notify parent of height changes for auto-resize
   useEffect(() => {
@@ -231,8 +259,25 @@ export default function EmbedSurveyPage() {
   const allVisibleQuestions = getVisibleQuestions();
   const currentQuestion = currentIndex >= 0 ? allVisibleQuestions[currentIndex] : null;
 
+  // Pipe answers into current question title and description
+  const pipedTitle = useMemo(() => {
+    if (!currentQuestion || !survey) return "";
+    return pipeAnswers(currentQuestion.title, survey.questions, answers);
+  }, [currentQuestion, survey, answers]);
+
+  const pipedDescription = useMemo(() => {
+    if (!currentQuestion?.description || !survey) return "";
+    return pipeAnswers(currentQuestion.description, survey.questions, answers);
+  }, [currentQuestion, survey, answers]);
+
+  // Filter options based on carry-forward configuration
+  const filteredOptions = useMemo(() => {
+    if (!currentQuestion || !survey) return [];
+    return filterOptions(currentQuestion, survey.questions, answers);
+  }, [currentQuestion, survey, answers]);
+
   const canProceed = useCallback(() => {
-    if (!currentQuestion) return true;
+    if (!currentQuestion || !survey) return true;
     if (currentQuestion.type === "SECTION_HEADER") return true;
     if (!currentQuestion.required) return true;
 
@@ -241,7 +286,8 @@ export default function EmbedSurveyPage() {
 
     if (currentQuestion.type === "RANKING") {
       const arr = answer as string[];
-      return arr.length === (currentQuestion.options?.length || 0);
+      const visibleOptions = filterOptions(currentQuestion, survey.questions, answers);
+      return arr.length === visibleOptions.length;
     }
     if (currentQuestion.type === "CONSTANT_SUM") {
       const obj = answer as Record<string, number>;
@@ -250,18 +296,40 @@ export default function EmbedSurveyPage() {
     }
     if (currentQuestion.type === "MATRIX") {
       const obj = answer as Record<string, number>;
-      return Object.keys(obj).length === (currentQuestion.options?.length || 0);
+      const visibleOptions = filterOptions(currentQuestion, survey.questions, answers);
+      return Object.keys(obj).length === visibleOptions.length;
     }
 
     return true;
-  }, [currentQuestion, answers]);
+  }, [currentQuestion, survey, answers]);
 
   const goNext = useCallback(() => {
     if (isAnimating || !canProceed()) return;
     setDirection("forward");
     setIsAnimating(true);
 
-    const nextIndex = currentIndex + 1;
+    // Check if current question has branch logic
+    let nextIndex = currentIndex + 1;
+    if (currentQuestion?.settings?.branchLogic) {
+      const branchAction = evaluateBranchLogic(currentQuestion.settings.branchLogic, answers);
+
+      if (branchAction.type === "end") {
+        handleSubmit();
+        setTimeout(() => setIsAnimating(false), 300);
+        return;
+      }
+
+      if (branchAction.type === "jump" && survey) {
+        // Find the target question in allVisibleQuestions
+        const targetVisibleIndex = allVisibleQuestions.findIndex(
+          q => q.id === branchAction.targetQuestionId
+        );
+        if (targetVisibleIndex !== -1) {
+          nextIndex = targetVisibleIndex;
+        }
+      }
+    }
+
     postToParent("progress", {
       current: nextIndex,
       total: allVisibleQuestions.length,
@@ -275,7 +343,7 @@ export default function EmbedSurveyPage() {
     }
 
     setTimeout(() => setIsAnimating(false), 300);
-  }, [currentIndex, isAnimating, canProceed, allVisibleQuestions.length]);
+  }, [currentIndex, isAnimating, canProceed, allVisibleQuestions, currentQuestion, answers, survey]);
 
   const goBack = useCallback(() => {
     if (isAnimating || currentIndex <= -1) return;
@@ -352,7 +420,7 @@ export default function EmbedSurveyPage() {
       <div
         ref={containerRef}
         className="min-h-screen flex items-center justify-center"
-        style={{ backgroundColor: bgColor }}
+        style={{ background: bgStyle }}
       >
         <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
       </div>
@@ -364,7 +432,7 @@ export default function EmbedSurveyPage() {
       <div
         ref={containerRef}
         className="min-h-screen flex items-center justify-center p-6"
-        style={{ backgroundColor: bgColor }}
+        style={{ background: bgStyle }}
       >
         <div className="text-center">
           <AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-500" />
@@ -382,7 +450,7 @@ export default function EmbedSurveyPage() {
       <div
         ref={containerRef}
         className="min-h-screen flex items-center justify-center p-6"
-        style={{ backgroundColor: bgColor }}
+        style={{ background: bgStyle }}
       >
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
@@ -411,7 +479,7 @@ export default function EmbedSurveyPage() {
       <div
         ref={containerRef}
         className="min-h-screen flex items-center justify-center p-6"
-        style={{ backgroundColor: bgColor }}
+        style={{ background: bgStyle }}
       >
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -452,7 +520,7 @@ export default function EmbedSurveyPage() {
       <div
         ref={containerRef}
         className="min-h-screen flex items-center justify-center p-6"
-        style={{ backgroundColor: bgColor }}
+        style={{ background: bgStyle }}
       >
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -507,7 +575,7 @@ export default function EmbedSurveyPage() {
     <div
       ref={containerRef}
       className="min-h-screen flex flex-col"
-      style={{ backgroundColor: bgColor }}
+      style={{ background: bgStyle }}
     >
       {/* Progress bar */}
       <div className="h-1 bg-gray-200">
@@ -547,25 +615,25 @@ export default function EmbedSurveyPage() {
                         className="w-12 h-1 mb-6 rounded-full"
                         style={{ backgroundColor: accentColor }}
                       />
-                      <h2 className="text-2xl font-bold mb-2">{currentQuestion.title}</h2>
-                      {currentQuestion.description && (
-                        <p className="text-gray-600">{currentQuestion.description}</p>
+                      <h2 className="text-2xl font-bold mb-2">{pipedTitle}</h2>
+                      {pipedDescription && (
+                        <p className="text-gray-600">{pipedDescription}</p>
                       )}
                     </div>
                   ) : (
                     <>
                       {/* Question title */}
                       <h2 className="text-2xl font-bold mb-2">
-                        {currentQuestion.title}
+                        {pipedTitle}
                         {currentQuestion.required && <span style={{ color: accentColor }}> *</span>}
                       </h2>
-                      {currentQuestion.description && (
-                        <p className="text-gray-600 mb-6">{currentQuestion.description}</p>
+                      {pipedDescription && (
+                        <p className="text-gray-600 mb-6">{pipedDescription}</p>
                       )}
 
                       {/* Question input based on type */}
                       <motion.div variants={containerVariants} initial="initial" animate="animate" className="mt-6">
-                        {renderQuestionInput(currentQuestion, answers, updateAnswer, inputRef, accentColor)}
+                        {renderQuestionInput(currentQuestion, survey?.questions || [], answers, updateAnswer, inputRef, accentColor)}
                       </motion.div>
                     </>
                   )}
@@ -612,12 +680,15 @@ export default function EmbedSurveyPage() {
 // Render question input based on type
 function renderQuestionInput(
   question: Question,
+  allQuestions: Question[],
   answers: Record<string, unknown>,
   updateAnswer: (id: string, value: unknown) => void,
   inputRef: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>,
   accentColor: string
 ) {
   const answer = answers[question.id];
+  // Get filtered options (respects carry-forward configuration)
+  const options = filterOptions(question, allQuestions, answers);
 
   switch (question.type) {
     case "SHORT_TEXT":
@@ -687,7 +758,7 @@ function renderQuestionInput(
     case "DROPDOWN":
       return (
         <div className="space-y-3">
-          {question.options?.map((option, i) => (
+          {options.map((option, i) => (
             <motion.button
               key={i}
               variants={itemVariants}
@@ -721,7 +792,7 @@ function renderQuestionInput(
       const selected = (answer as string[]) || [];
       return (
         <div className="space-y-3">
-          {question.options?.map((option, i) => (
+          {options.map((option, i) => (
             <motion.button
               key={i}
               variants={itemVariants}
@@ -905,7 +976,7 @@ function renderQuestionInput(
       const matrixMax = question.settings?.scaleMax || 5;
       return (
         <div className="space-y-4">
-          {question.options?.map((item, i) => (
+          {options.map((item, i) => (
             <motion.div key={i} variants={itemVariants} className="p-4 bg-white rounded-lg border">
               <div className="font-medium mb-3">{item}</div>
               <div className="flex gap-2">
@@ -928,7 +999,7 @@ function renderQuestionInput(
       );
 
     case "RANKING":
-      const rankItems = (answer as string[]) || [...(question.options || [])];
+      const rankItems = (answer as string[]) || [...options];
       const moveItem = (from: number, to: number) => {
         const newItems = [...rankItems];
         const [moved] = newItems.splice(from, 1);
@@ -985,7 +1056,7 @@ function renderQuestionInput(
               {currentSum} / {total}
             </span>
           </div>
-          {question.options?.map((opt, i) => (
+          {options.map((opt, i) => (
             <motion.div key={i} variants={itemVariants} className="flex items-center gap-4">
               <span className="flex-1">{opt}</span>
               <Input
@@ -1012,7 +1083,7 @@ function renderQuestionInput(
     case "IMAGE_CHOICE":
       return (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {question.options?.map((option, i) => {
+          {options.map((option, i) => {
             const imageUrl = question.settings?.imageUrls?.[option];
             return (
               <motion.button

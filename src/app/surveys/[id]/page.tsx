@@ -134,7 +134,7 @@ export default function SurveyPage() {
     );
   }
 
-  const surveyUrl = `/s/${survey.id}`;
+  const surveyUrl = `/s/${survey.id}?preview=true`;
 
   return (
     <div className="min-h-screen bg-[#fbf5ea]">
@@ -184,18 +184,44 @@ export default function SurveyPage() {
               )}
               Duplicate
             </Button>
-            <Link href={`/surveys/${survey.id}/distribute`}>
-              <Button variant="outline" size="sm">
+            {survey.published ? (
+              <Link href={`/surveys/${survey.id}/distribute`}>
+                <Button variant="outline" size="sm">
+                  <Share2 className="w-4 h-4 mr-2" />
+                  Distribute
+                </Button>
+              </Link>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled
+                title="Publish your survey first to distribute it"
+                className="opacity-50 cursor-not-allowed"
+              >
                 <Share2 className="w-4 h-4 mr-2" />
                 Distribute
               </Button>
-            </Link>
-            <Link href={`/surveys/${survey.id}/results`}>
-              <Button variant="outline" size="sm">
+            )}
+            {survey.published ? (
+              <Link href={`/surveys/${survey.id}/results`}>
+                <Button variant="outline" size="sm">
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Results
+                </Button>
+              </Link>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled
+                title="Publish your survey first to see results"
+                className="opacity-50 cursor-not-allowed"
+              >
                 <BarChart3 className="w-4 h-4 mr-2" />
                 Results
               </Button>
-            </Link>
+            )}
             <Link href={surveyUrl} target="_blank">
               <Button variant="outline" size="sm">
                 <Eye className="w-4 h-4 mr-2" />

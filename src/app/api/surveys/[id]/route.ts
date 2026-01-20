@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { logger } from "@/lib/logger";
 import { apiError, apiSuccess } from "@/lib/api-response";
+import { requirePermission, PermissionError } from "@/lib/permissions";
 
 export async function GET(
   request: NextRequest,
@@ -17,6 +18,9 @@ export async function GET(
 
     const { id } = await params;
 
+    // Check view permission (owner or collaborator)
+    const access = await requirePermission(id, userId, "view");
+
     const survey = await db.survey.findUnique({
       where: { id },
       include: {
@@ -26,6 +30,15 @@ export async function GET(
         _count: {
           select: { responses: true },
         },
+        collaborators: {
+          select: {
+            id: true,
+            userId: true,
+            email: true,
+            role: true,
+            acceptedAt: true,
+          },
+        },
       },
     });
 
@@ -33,13 +46,19 @@ export async function GET(
       return apiError("Survey not found", 404);
     }
 
-    // Check ownership
-    if (survey.userId !== userId) {
-      return apiError("Unauthorized", 403);
-    }
-
-    return apiSuccess(survey);
+    // Include user's access info in response
+    return apiSuccess({
+      ...survey,
+      userAccess: {
+        role: access.role,
+        isOwner: access.isOwner,
+        permissions: access.permissions,
+      },
+    });
   } catch (error) {
+    if (error instanceof PermissionError) {
+      return apiError(error.message, error.statusCode);
+    }
     logger.error("Error fetching survey", error);
     return apiError("Failed to fetch survey", 500);
   }
@@ -58,18 +77,12 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
-    // Check if survey exists
-    const survey = await db.survey.findUnique({
-      where: { id },
-    });
+    // Check edit permission
+    const access = await requirePermission(id, userId, "edit");
 
-    if (!survey) {
-      return apiError("Survey not found", 404);
-    }
-
-    // Check ownership
-    if (survey.userId !== userId) {
-      return apiError("Unauthorized", 403);
+    // Check if publishing (requires publish permission)
+    if (body.published === true && !access.permissions.publish) {
+      return apiError("You don't have permission to publish this survey", 403);
     }
 
     // Only allow updating specific fields
@@ -89,6 +102,9 @@ export async function PATCH(
 
     return apiSuccess(updatedSurvey);
   } catch (error) {
+    if (error instanceof PermissionError) {
+      return apiError(error.message, error.statusCode);
+    }
     logger.error("Error updating survey", error);
     return apiError("Failed to update survey", 500);
   }
@@ -107,6 +123,9 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
+    // Check edit permission
+    await requirePermission(id, userId, "edit");
+
     // Check if survey exists
     const survey = await db.survey.findUnique({
       where: { id },
@@ -115,11 +134,6 @@ export async function PUT(
 
     if (!survey) {
       return apiError("Survey not found", 404);
-    }
-
-    // Check ownership
-    if (survey.userId !== userId) {
-      return apiError("Unauthorized", 403);
     }
 
     // Don't allow editing published surveys
@@ -196,6 +210,9 @@ export async function PUT(
 
     return apiSuccess(updatedSurvey);
   } catch (error) {
+    if (error instanceof PermissionError) {
+      return apiError(error.message, error.statusCode);
+    }
     logger.error("Error updating survey", error);
     return apiError("Failed to update survey", 500);
   }
@@ -213,19 +230,8 @@ export async function DELETE(
 
     const { id } = await params;
 
-    // Check if survey exists
-    const survey = await db.survey.findUnique({
-      where: { id },
-    });
-
-    if (!survey) {
-      return apiError("Survey not found", 404);
-    }
-
-    // Check ownership
-    if (survey.userId !== userId) {
-      return apiError("Unauthorized", 403);
-    }
+    // Check delete permission (only owner can delete)
+    await requirePermission(id, userId, "delete");
 
     // Delete related records first (no cascade in HTTP mode)
     await db.answer.deleteMany({
@@ -240,6 +246,12 @@ export async function DELETE(
     await db.question.deleteMany({
       where: { surveyId: id },
     });
+    await db.surveyCollaborator.deleteMany({
+      where: { surveyId: id },
+    });
+    await db.collaboratorInvitation.deleteMany({
+      where: { surveyId: id },
+    });
 
     // Delete the survey
     await db.survey.delete({
@@ -248,6 +260,9 @@ export async function DELETE(
 
     return apiSuccess({ success: true });
   } catch (error) {
+    if (error instanceof PermissionError) {
+      return apiError(error.message, error.statusCode);
+    }
     logger.error("Error deleting survey", error);
     return apiError("Failed to delete survey", 500);
   }

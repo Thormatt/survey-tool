@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { apiError, apiSuccess } from "@/lib/api-response";
 import { getPaginationParams, paginatedResponse, prismaPagination } from "@/lib/pagination";
+import { requirePermission, PermissionError } from "@/lib/permissions";
 
 export async function GET(
   request: NextRequest,
@@ -17,7 +18,10 @@ export async function GET(
 
     const { id } = await params;
 
-    // First check survey ownership without loading all answers
+    // Check viewResponses permission (owner, editor, or viewer)
+    await requirePermission(id, userId, "viewResponses");
+
+    // Get survey info
     const survey = await db.survey.findUnique({
       where: { id },
       select: {
@@ -34,11 +38,6 @@ export async function GET(
 
     if (!survey) {
       return apiError("Survey not found", 404);
-    }
-
-    // Check ownership
-    if (survey.userId !== userId) {
-      return apiError("Unauthorized", 403);
     }
 
     const pagination = getPaginationParams(request);
@@ -81,6 +80,9 @@ export async function GET(
       },
     });
   } catch (error) {
+    if (error instanceof PermissionError) {
+      return apiError(error.message, error.statusCode);
+    }
     logger.error("Error fetching survey results", error);
     return apiError("Failed to fetch results", 500);
   }

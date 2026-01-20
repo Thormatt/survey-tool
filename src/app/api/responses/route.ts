@@ -5,6 +5,7 @@ import { apiError, apiSuccess, validationError } from "@/lib/api-response";
 import { responseSchema, formatZodErrors } from "@/lib/validations";
 import { rateLimit } from "@/lib/rate-limit";
 import { Prisma } from "@/generated/prisma/client";
+import { emitResponseSubmitted } from "@/lib/events";
 
 export async function POST(request: NextRequest) {
   try {
@@ -109,6 +110,11 @@ export async function POST(request: NextRequest) {
         },
       });
     }
+
+    // Fire response submitted event (async, don't block response)
+    emitResponseSubmitted(surveyId, response.id).catch((err) => {
+      logger.error("Error emitting response event", err);
+    });
 
     return apiSuccess({ success: true, responseId: response.id }, 201);
   } catch (error) {

@@ -13,6 +13,13 @@ enum SurveyAccessType {
   INVITE_ONLY  // Only invited email addresses can respond
 }
 
+// Collaborator roles for team collaboration
+enum CollaboratorRole {
+  OWNER   // Full access, can delete survey and manage team
+  EDITOR  // Can edit survey and view responses
+  VIEWER  // Can only view survey and responses
+}
+
 // Survey - the main survey entity
 model Survey {
   id                   String           @id @default(cuid())
@@ -32,6 +39,10 @@ model Survey {
   questions            Question[]
   responses            Response[]
   invitations          Invitation[]
+  collaborators        SurveyCollaborator[]
+  collaboratorInvites  CollaboratorInvitation[]
+  webhooks             Webhook[]
+  alerts               Alert[]
 
   @@index([published])
   @@index([userId])
@@ -180,4 +191,132 @@ model EmailGroupMember {
 
   @@unique([groupId, email])
   @@index([groupId])
+}
+
+// Survey Collaborator - users with access to a survey
+model SurveyCollaborator {
+  id         String           @id @default(cuid())
+  surveyId   String
+  survey     Survey           @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  userId     String           // Clerk user ID of the collaborator
+  email      String           // Email for display purposes
+  role       CollaboratorRole
+  invitedBy  String?          // Clerk user ID of who invited them
+  invitedAt  DateTime         @default(now())
+  acceptedAt DateTime?        // When they accepted the invite
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([surveyId, userId])
+  @@unique([surveyId, email])
+  @@index([surveyId])
+  @@index([userId])
+}
+
+// Collaborator Invitation - pending invites to collaborate on a survey
+model CollaboratorInvitation {
+  id        String           @id @default(cuid())
+  surveyId  String
+  survey    Survey           @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  email     String           // Email to invite
+  role      CollaboratorRole
+  token     String           @unique @default(cuid()) // Invite token
+  invitedBy String           // Clerk user ID of who invited them
+  expiresAt DateTime         // When the invite expires
+  createdAt DateTime         @default(now())
+
+  @@unique([surveyId, email])
+  @@index([token])
+  @@index([surveyId])
+}
+
+// ============================================
+// AUTOMATED ALERTS & WEBHOOKS
+// ============================================
+
+// Event types that can trigger notifications
+enum EventType {
+  RESPONSE_SUBMITTED  // When any response is submitted
+  SURVEY_COMPLETED    // When survey reaches response goal
+  TRIGGER_MATCHED     // When a specific trigger condition is met
+}
+
+// Notification channels
+enum NotificationChannel {
+  EMAIL
+  SLACK
+  WEBHOOK
+}
+
+// Comparison operators for trigger conditions
+enum TriggerOperator {
+  EQUALS
+  NOT_EQUALS
+  GREATER_THAN
+  LESS_THAN
+  CONTAINS
+  IS_EMPTY
+}
+
+// Webhook - HTTP endpoint to receive survey events
+model Webhook {
+  id         String            @id @default(cuid())
+  surveyId   String
+  survey     Survey            @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  name       String            // Display name
+  url        String            // Webhook URL
+  secret     String?           // Optional secret for signature verification
+  enabled    Boolean           @default(true)
+  events     EventType[]       // Which events to send
+  headers    Json?             // Custom headers to include
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  deliveries WebhookDelivery[]
+
+  @@index([surveyId])
+}
+
+// Webhook Delivery - tracks each webhook call attempt
+model WebhookDelivery {
+  id           String    @id @default(cuid())
+  webhookId    String
+  webhook      Webhook   @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  eventType    EventType
+  payload      Json      // What was sent
+  responseCode Int?      // HTTP response status
+  responseBody String?   // Response body (truncated)
+  error        String?   // Error message if failed
+  duration     Int?      // Request duration in ms
+  deliveredAt  DateTime  @default(now())
+
+  @@index([webhookId])
+  @@index([deliveredAt])
+}
+
+// Alert - notification rule for survey events
+model Alert {
+  id        String              @id @default(cuid())
+  surveyId  String
+  survey    Survey              @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  name      String              // Display name
+  channel   NotificationChannel // How to notify
+  enabled   Boolean             @default(true)
+  config    Json                // Channel-specific config (email addresses, slack webhook URL, etc.)
+  triggers  AlertTrigger[]      // Conditions that must be met
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  @@index([surveyId])
+}
+
+// Alert Trigger - condition that triggers an alert
+model AlertTrigger {
+  id         String          @id @default(cuid())
+  alertId    String
+  alert      Alert           @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  questionId String          // Which question to check
+  operator   TriggerOperator // Comparison operator
+  value      Json            // Value to compare against
+
+  @@index([alertId])
 }

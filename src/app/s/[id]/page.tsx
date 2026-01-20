@@ -1,9 +1,18 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useParams } from "next/navigation";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { useUser, SignInButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
+import {
+  pipeAnswers,
+  evaluateBranchLogic,
+  evaluateSkipLogic,
+  findNextVisibleQuestion as findNextVisibleQuestionUtil,
+  filterOptions,
+  BranchLogic,
+  OptionSource,
+} from "@/lib/conditional-logic";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -137,6 +146,97 @@ type RatingDisplayStyle = "stars" | "hearts" | "emojis" | "thumbs" | "numbers";
 type LikertDisplayStyle = "text" | "emoji" | "colored";
 type ScaleDisplayStyle = "numbers" | "slider" | "colored";
 
+// Rating button component - extracted to properly handle hover state
+interface RatingButtonProps {
+  rating: number;
+  isSelected: boolean;
+  displayStyle: RatingDisplayStyle;
+  onClick: () => void;
+}
+
+function RatingButton({ rating, isSelected, displayStyle, onClick }: RatingButtonProps) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  const renderRatingIcon = () => {
+    const filled = isSelected || (isHovered && rating <= (isSelected ? rating : rating));
+
+    switch (displayStyle) {
+      case "stars":
+        return (
+          <Star
+            className={`w-10 h-10 transition-all ${
+              filled ? "fill-yellow-400 text-yellow-400" : "text-white/30"
+            } ${isHovered && !filled ? "text-yellow-400/50" : ""}`}
+          />
+        );
+      case "hearts":
+        return (
+          <Heart
+            className={`w-10 h-10 transition-all ${
+              filled ? "fill-red-500 text-red-500" : "text-white/30"
+            } ${isHovered && !filled ? "text-red-500/50" : ""}`}
+          />
+        );
+      case "emojis":
+        const emojis = ["😞", "😕", "😐", "🙂", "😄"];
+        return (
+          <span className={`text-4xl transition-all ${filled ? "scale-110" : "grayscale opacity-50"}`}>
+            {emojis[rating - 1]}
+          </span>
+        );
+      case "thumbs":
+        if (rating <= 2) {
+          return (
+            <ThumbsDown
+              className={`w-10 h-10 transition-all ${
+                filled ? "fill-red-500 text-red-500" : "text-white/30"
+              }`}
+            />
+          );
+        } else if (rating === 3) {
+          return (
+            <span className={`text-3xl ${filled ? "" : "grayscale opacity-50"}`}>😐</span>
+          );
+        } else {
+          return (
+            <ThumbsUp
+              className={`w-10 h-10 transition-all ${
+                filled ? "fill-green-500 text-green-500" : "text-white/30"
+              }`}
+            />
+          );
+        }
+      case "numbers":
+      default:
+        return (
+          <span className="text-xl font-bold">{rating}</span>
+        );
+    }
+  };
+
+  return (
+    <motion.button
+      variants={itemVariants}
+      whileHover={{ scale: 1.1 }}
+      whileTap={{ scale: 0.95 }}
+      onHoverStart={() => setIsHovered(true)}
+      onHoverEnd={() => setIsHovered(false)}
+      onClick={onClick}
+      className={`w-16 h-16 rounded-xl border-2 flex items-center justify-center transition-all ${
+        displayStyle === "numbers"
+          ? isSelected
+            ? "border-[#FF4F01] bg-[#FF4F01] text-white"
+            : "border-white/20 text-white/60"
+          : isSelected
+            ? "border-[#FF4F01] bg-[#FF4F01]/10"
+            : "border-white/10 bg-white/5"
+      }`}
+    >
+      {renderRatingIcon()}
+    </motion.button>
+  );
+}
+
 interface Question {
   id: string;
   type: string;
@@ -146,6 +246,8 @@ interface Question {
   options?: string[];
   settings?: {
     skipLogic?: SkipLogic;
+    branchLogic?: BranchLogic;
+    optionSource?: OptionSource;
     // Matrix/Scale settings
     scaleMin?: number;
     scaleMax?: number;
@@ -231,6 +333,8 @@ function Confetti() {
 
 export default function SurveyResponsePage() {
   const params = useParams();
+  const searchParams = useSearchParams();
+  const isPreview = searchParams.get("preview") === "true";
   const { user, isLoaded: userLoaded } = useUser();
   const [survey, setSurvey] = useState<Survey | null>(null);
   const [loading, setLoading] = useState(true);
@@ -253,9 +357,11 @@ export default function SurveyResponsePage() {
     async function fetchSurvey() {
       try {
         const userEmail = user?.primaryEmailAddress?.emailAddress;
-        const url = userEmail
-          ? `/api/surveys/${params.id}/public?email=${encodeURIComponent(userEmail)}`
-          : `/api/surveys/${params.id}/public`;
+        const queryParams = new URLSearchParams();
+        if (userEmail) queryParams.set("email", userEmail);
+        if (isPreview) queryParams.set("preview", "true");
+        const queryString = queryParams.toString();
+        const url = `/api/surveys/${params.id}/public${queryString ? `?${queryString}` : ""}`;
 
         const res = await fetch(url);
 
@@ -293,7 +399,7 @@ export default function SurveyResponsePage() {
     if (params.id && userLoaded) {
       fetchSurvey();
     }
-  }, [params.id, userLoaded, user]);
+  }, [params.id, userLoaded, user, isPreview]);
 
   // Auto-focus input when question changes
   useEffect(() => {
@@ -313,6 +419,24 @@ export default function SurveyResponsePage() {
   const progress = totalSteps > 0 ? Math.max(0, (currentStep / totalSteps) * 100) : 0;
 
   const currentQuestion = survey && currentIndex >= 0 ? survey.questions[currentIndex] : null;
+
+  // Pipe answers into current question title and description
+  const pipedTitle = useMemo(() => {
+    if (!currentQuestion || !survey) return "";
+    return pipeAnswers(currentQuestion.title, survey.questions, answers);
+  }, [currentQuestion, survey, answers]);
+
+  const pipedDescription = useMemo(() => {
+    if (!currentQuestion?.description || !survey) return "";
+    return pipeAnswers(currentQuestion.description, survey.questions, answers);
+  }, [currentQuestion, survey, answers]);
+
+  // Filter options based on carry-forward configuration
+  // This enables follow-up questions to only show options selected in a previous question
+  const filteredOptions = useMemo(() => {
+    if (!currentQuestion || !survey) return [];
+    return filterOptions(currentQuestion, survey.questions, answers);
+  }, [currentQuestion, survey, answers]);
 
   const updateAnswer = (questionId: string, value: unknown) => {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
@@ -366,8 +490,8 @@ export default function SurveyResponsePage() {
       if (currentQuestion.type === "MATRIX" && currentQuestion.required) {
         const answer = answers[currentQuestion.id] as Record<string, number> | undefined;
         if (!answer) return false;
-        // Ensure all items have been rated
-        const requiredItems = currentQuestion.options || [];
+        // Ensure all filtered items have been rated (respects carry-forward)
+        const requiredItems = filterOptions(currentQuestion, survey.questions, answers);
         return requiredItems.every(item => answer[item] !== undefined);
       }
 
@@ -375,7 +499,9 @@ export default function SurveyResponsePage() {
       if (currentQuestion.type === "RANKING" && currentQuestion.required) {
         const answer = answers[currentQuestion.id] as string[] | undefined;
         if (!answer) return false;
-        return answer.length === (currentQuestion.options?.length || 0);
+        // Use filtered options (respects carry-forward)
+        const visibleOptions = filterOptions(currentQuestion, survey.questions, answers);
+        return answer.length === visibleOptions.length;
       }
 
       // CONSTANT_SUM validation - ensure sum equals total
@@ -439,9 +565,39 @@ export default function SurveyResponsePage() {
       : results.every((r) => r);
   }, []);
 
-  // Find the next visible question index
-  const findNextVisibleQuestion = useCallback((fromIndex: number) => {
+  // Find the next visible question index, respecting branch logic
+  const findNextVisibleQuestion = useCallback((fromIndex: number): number => {
     if (!survey) return -1;
+
+    // Check if current question has branch logic
+    const currentQuestion = fromIndex >= 0 ? survey.questions[fromIndex] : null;
+    if (currentQuestion?.settings?.branchLogic) {
+      const branchAction = evaluateBranchLogic(currentQuestion.settings.branchLogic, answers);
+
+      if (branchAction.type === "end") {
+        return -1; // End survey
+      }
+
+      if (branchAction.type === "jump") {
+        // Find the target question index
+        const targetIndex = survey.questions.findIndex(q => q.id === branchAction.targetQuestionId);
+        if (targetIndex !== -1) {
+          // Check if target question should be shown based on its skip logic
+          if (shouldShowQuestion(survey.questions[targetIndex], answers)) {
+            return targetIndex;
+          }
+          // Target question is skipped, continue searching from there
+          for (let i = targetIndex + 1; i < survey.questions.length; i++) {
+            if (shouldShowQuestion(survey.questions[i], answers)) {
+              return i;
+            }
+          }
+          return -1; // No more visible questions after target
+        }
+      }
+    }
+
+    // Default: find next visible question sequentially
     for (let i = fromIndex + 1; i < survey.questions.length; i++) {
       if (shouldShowQuestion(survey.questions[i], answers)) {
         return i;
@@ -852,17 +1008,17 @@ export default function SurveyResponsePage() {
                 )}
               </p>
               <h2 className="font-['Syne'] text-3xl md:text-4xl font-bold text-white mb-3 leading-tight">
-                {currentQuestion.title}
+                {pipedTitle}
               </h2>
-              {currentQuestion.description && (
+              {pipedDescription && (
                 currentQuestion.type === "SECTION_HEADER" ? (
                   <p className="text-lg md:text-xl text-white/70 mb-10 italic leading-relaxed">
                     <span className="text-[#FF4F01]">&ldquo;</span>
-                    {currentQuestion.description}
+                    {pipedDescription}
                     <span className="text-[#FF4F01]">&rdquo;</span>
                   </p>
                 ) : (
-                  <p className="text-white/80 mb-10">{currentQuestion.description}</p>
+                  <p className="text-white/80 mb-10">{pipedDescription}</p>
                 )
               )}
 
@@ -925,7 +1081,7 @@ export default function SurveyResponsePage() {
               )}
 
               {/* Single Choice */}
-              {currentQuestion.type === "SINGLE_CHOICE" && currentQuestion.options && (
+              {currentQuestion.type === "SINGLE_CHOICE" && filteredOptions.length > 0 && (
                 <motion.div
                   className="space-y-3"
                   variants={containerVariants}
@@ -934,7 +1090,7 @@ export default function SurveyResponsePage() {
                   role="radiogroup"
                   aria-label={currentQuestion.title}
                 >
-                  {currentQuestion.options.map((option, idx) => {
+                  {filteredOptions.map((option, idx) => {
                     const isSelected = answers[currentQuestion.id] === option;
                     return (
                       <motion.button
@@ -975,14 +1131,14 @@ export default function SurveyResponsePage() {
               )}
 
               {/* Multiple Choice */}
-              {currentQuestion.type === "MULTIPLE_CHOICE" && currentQuestion.options && (
+              {currentQuestion.type === "MULTIPLE_CHOICE" && filteredOptions.length > 0 && (
                 <motion.div
                   className="space-y-3"
                   variants={containerVariants}
                   initial="initial"
                   animate="animate"
                 >
-                  {currentQuestion.options.map((option, idx) => {
+                  {filteredOptions.map((option, idx) => {
                     const isSelected = ((answers[currentQuestion.id] as string[]) || []).includes(option);
                     return (
                       <motion.button
@@ -1022,65 +1178,6 @@ export default function SurveyResponsePage() {
                 const displayStyle = (currentQuestion.settings?.displayStyle as RatingDisplayStyle) || "numbers";
                 const selectedRating = answers[currentQuestion.id] as number;
 
-                // Render functions for different styles
-                const renderRatingIcon = (rating: number, isSelected: boolean, isHovered: boolean) => {
-                  const filled = isSelected || (selectedRating !== undefined && rating <= selectedRating);
-
-                  switch (displayStyle) {
-                    case "stars":
-                      return (
-                        <Star
-                          className={`w-10 h-10 transition-all ${
-                            filled ? "fill-yellow-400 text-yellow-400" : "text-white/30"
-                          } ${isHovered && !filled ? "text-yellow-400/50" : ""}`}
-                        />
-                      );
-                    case "hearts":
-                      return (
-                        <Heart
-                          className={`w-10 h-10 transition-all ${
-                            filled ? "fill-red-500 text-red-500" : "text-white/30"
-                          } ${isHovered && !filled ? "text-red-500/50" : ""}`}
-                        />
-                      );
-                    case "emojis":
-                      const emojis = ["😞", "😕", "😐", "🙂", "😄"];
-                      return (
-                        <span className={`text-4xl transition-all ${filled ? "scale-110" : "grayscale opacity-50"}`}>
-                          {emojis[rating - 1]}
-                        </span>
-                      );
-                    case "thumbs":
-                      // Thumbs: 1-2 = thumbs down, 3 = neutral, 4-5 = thumbs up
-                      if (rating <= 2) {
-                        return (
-                          <ThumbsDown
-                            className={`w-10 h-10 transition-all ${
-                              filled ? "fill-red-500 text-red-500" : "text-white/30"
-                            }`}
-                          />
-                        );
-                      } else if (rating === 3) {
-                        return (
-                          <span className={`text-3xl ${filled ? "" : "grayscale opacity-50"}`}>😐</span>
-                        );
-                      } else {
-                        return (
-                          <ThumbsUp
-                            className={`w-10 h-10 transition-all ${
-                              filled ? "fill-green-500 text-green-500" : "text-white/30"
-                            }`}
-                          />
-                        );
-                      }
-                    case "numbers":
-                    default:
-                      return (
-                        <span className="text-xl font-bold">{rating}</span>
-                      );
-                  }
-                };
-
                 return (
                   <motion.div
                     className="flex gap-3 flex-wrap justify-center"
@@ -1088,36 +1185,18 @@ export default function SurveyResponsePage() {
                     initial="initial"
                     animate="animate"
                   >
-                    {[1, 2, 3, 4, 5].map((rating) => {
-                      const isSelected = selectedRating === rating;
-                      const [isHovered, setIsHovered] = React.useState(false);
-
-                      return (
-                        <motion.button
-                          key={rating}
-                          variants={itemVariants}
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.95 }}
-                          onHoverStart={() => setIsHovered(true)}
-                          onHoverEnd={() => setIsHovered(false)}
-                          onClick={() => {
-                            updateAnswer(currentQuestion.id, rating);
-                            setTimeout(goNext, 400);
-                          }}
-                          className={`w-16 h-16 rounded-xl border-2 flex items-center justify-center transition-all ${
-                            displayStyle === "numbers"
-                              ? isSelected
-                                ? "border-[#FF4F01] bg-[#FF4F01] text-white"
-                                : "border-white/20 text-white/60"
-                              : isSelected
-                                ? "border-[#FF4F01] bg-[#FF4F01]/10"
-                                : "border-white/10 bg-white/5"
-                          }`}
-                        >
-                          {renderRatingIcon(rating, isSelected, isHovered)}
-                        </motion.button>
-                      );
-                    })}
+                    {[1, 2, 3, 4, 5].map((rating) => (
+                      <RatingButton
+                        key={rating}
+                        rating={rating}
+                        isSelected={selectedRating === rating}
+                        displayStyle={displayStyle}
+                        onClick={() => {
+                          updateAnswer(currentQuestion.id, rating);
+                          setTimeout(goNext, 400);
+                        }}
+                      />
+                    ))}
                   </motion.div>
                 );
               })()}
@@ -1303,7 +1382,7 @@ export default function SurveyResponsePage() {
               )}
 
               {/* Matrix Question */}
-              {currentQuestion.type === "MATRIX" && currentQuestion.options && (
+              {currentQuestion.type === "MATRIX" && filteredOptions.length > 0 && (
                 <motion.div
                   variants={containerVariants}
                   initial="initial"
@@ -1326,7 +1405,7 @@ export default function SurveyResponsePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {currentQuestion.options.map((item) => {
+                      {filteredOptions.map((item) => {
                         const matrixAnswers = (answers[currentQuestion.id] as Record<string, number>) || {};
                         return (
                           <motion.tr
@@ -1410,7 +1489,7 @@ export default function SurveyResponsePage() {
               )}
 
               {/* Dropdown */}
-              {currentQuestion.type === "DROPDOWN" && currentQuestion.options && (
+              {currentQuestion.type === "DROPDOWN" && filteredOptions.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -1428,7 +1507,7 @@ export default function SurveyResponsePage() {
                     className="w-full p-5 rounded-xl border-2 border-white/10 bg-white/5 text-white text-lg appearance-none cursor-pointer focus:border-[#FF4F01] focus:ring-0 focus:outline-none"
                   >
                     <option value="" className="bg-[#1a1a2e]">Select an option...</option>
-                    {currentQuestion.options.map((option) => (
+                    {filteredOptions.map((option) => (
                       <option key={option} value={option} className="bg-[#1a1a2e]">
                         {option}
                       </option>
@@ -1708,7 +1787,7 @@ export default function SurveyResponsePage() {
               )}
 
               {/* Ranking - Drag to reorder */}
-              {currentQuestion.type === "RANKING" && currentQuestion.options && (
+              {currentQuestion.type === "RANKING" && filteredOptions.length > 0 && (
                 <motion.div
                   variants={containerVariants}
                   initial="initial"
@@ -1718,7 +1797,7 @@ export default function SurveyResponsePage() {
                   <p className="text-white/70 text-sm mb-4">Click items in order of preference (1st = most preferred)</p>
                   {(() => {
                     const rankedItems = (answers[currentQuestion.id] as string[]) || [];
-                    const unrankedItems = currentQuestion.options!.filter(
+                    const unrankedItems = filteredOptions.filter(
                       (item) => !rankedItems.includes(item)
                     );
 
@@ -1772,7 +1851,7 @@ export default function SurveyResponsePage() {
               )}
 
               {/* Constant Sum - Distribute points */}
-              {currentQuestion.type === "CONSTANT_SUM" && currentQuestion.options && (
+              {currentQuestion.type === "CONSTANT_SUM" && filteredOptions.length > 0 && (
                 <motion.div
                   variants={containerVariants}
                   initial="initial"
@@ -1794,7 +1873,7 @@ export default function SurveyResponsePage() {
                           </span>
                         </div>
 
-                        {currentQuestion.options!.map((item) => (
+                        {filteredOptions.map((item) => (
                           <motion.div
                             key={item}
                             variants={itemVariants}
@@ -1864,14 +1943,14 @@ export default function SurveyResponsePage() {
               )}
 
               {/* Image Choice */}
-              {currentQuestion.type === "IMAGE_CHOICE" && currentQuestion.options && (
+              {currentQuestion.type === "IMAGE_CHOICE" && filteredOptions.length > 0 && (
                 <motion.div
                   className="grid grid-cols-2 gap-4"
                   variants={containerVariants}
                   initial="initial"
                   animate="animate"
                 >
-                  {currentQuestion.options.map((option) => {
+                  {filteredOptions.map((option) => {
                     const isSelected = answers[currentQuestion.id] === option;
                     const imageUrl = currentQuestion.settings?.imageUrls?.[option];
                     return (
@@ -2130,7 +2209,7 @@ export default function SurveyResponsePage() {
                     <Play className="w-10 h-10 text-white" />
                   </div>
                   <p className="text-white/70 text-lg mb-8">
-                    {currentQuestion.description || "Welcome! Click below to begin."}
+                    {pipedDescription || "Welcome! Click below to begin."}
                   </p>
                   <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                     <Button
@@ -2156,7 +2235,7 @@ export default function SurveyResponsePage() {
                     <PartyPopper className="w-10 h-10 text-green-400" />
                   </div>
                   <p className="text-white/70 text-lg mb-8">
-                    {currentQuestion.description || "Thank you for completing this survey!"}
+                    {pipedDescription || "Thank you for completing this survey!"}
                   </p>
                   {currentQuestion.settings?.redirectUrl && (
                     <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
@@ -2185,7 +2264,7 @@ export default function SurveyResponsePage() {
                     <FileText className="w-10 h-10 text-[#FF4F01] mb-6" />
                     <div className="prose prose-invert max-w-none">
                       <p className="text-white/80 text-lg leading-relaxed">
-                        {currentQuestion.description || "This is an informational statement."}
+                        {pipedDescription || "This is an informational statement."}
                       </p>
                     </div>
                   </div>
@@ -2205,7 +2284,7 @@ export default function SurveyResponsePage() {
                   <div className="bg-white/5 border border-white/10 rounded-xl p-6 mb-6">
                     <ShieldCheck className="w-8 h-8 text-[#FF4F01] mb-4" />
                     <p className="text-white/80 text-base leading-relaxed mb-4">
-                      {currentQuestion.description || "Please review and accept the terms below."}
+                      {pipedDescription || "Please review and accept the terms below."}
                     </p>
                     {currentQuestion.settings?.linkUrl && (
                       <a

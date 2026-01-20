@@ -87,14 +87,26 @@ export async function GET(request: NextRequest) {
     }
 
     const pagination = getPaginationParams(request);
+    const url = new URL(request.url);
+    const includeShared = url.searchParams.get("includeShared") !== "false";
+
+    // Build the where clause to include owned and shared surveys
+    const whereClause: Prisma.SurveyWhereInput = includeShared
+      ? {
+          OR: [
+            { userId }, // Owned surveys
+            { collaborators: { some: { userId } } }, // Shared surveys
+          ],
+        }
+      : { userId };
 
     // Get total count for pagination
     const total = await db.survey.count({
-      where: { userId },
+      where: whereClause,
     });
 
     const surveys = await db.survey.findMany({
-      where: { userId },
+      where: whereClause,
       orderBy: { createdAt: "desc" },
       ...prismaPagination(pagination),
       include: {
@@ -104,10 +116,26 @@ export async function GET(request: NextRequest) {
         _count: {
           select: { responses: true, questions: true },
         },
+        collaborators: {
+          where: { userId },
+          select: { role: true },
+        },
       },
     });
 
-    return apiSuccess(paginatedResponse(surveys, total, pagination));
+    // Transform surveys to include role info
+    const surveysWithRole = surveys.map((survey) => {
+      const isOwner = survey.userId === userId;
+      const collaboratorRole = survey.collaborators[0]?.role;
+      return {
+        ...survey,
+        userRole: isOwner ? "OWNER" : collaboratorRole,
+        isOwner,
+        collaborators: undefined, // Remove from response
+      };
+    });
+
+    return apiSuccess(paginatedResponse(surveysWithRole, total, pagination));
   } catch (error) {
     logger.error("Error fetching surveys", error);
     return apiError("Failed to fetch surveys", 500);

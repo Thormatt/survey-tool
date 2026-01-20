@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { apiError, apiSuccess } from "@/lib/api-response";
@@ -11,6 +12,7 @@ export async function GET(
     const { id } = await params;
     const { searchParams } = new URL(request.url);
     const email = searchParams.get("email"); // User's email from Clerk
+    const isPreview = searchParams.get("preview") === "true";
 
     const survey = await db.survey.findUnique({
       where: { id },
@@ -25,8 +27,17 @@ export async function GET(
       return apiError("Survey not found", 404);
     }
 
+    // Allow owners to preview their draft surveys
     if (!survey.published) {
-      return apiError("Survey is not available", 403);
+      if (!isPreview) {
+        return apiError("Survey is not available", 403);
+      }
+
+      // Verify the current user is the survey owner
+      const { userId } = await auth();
+      if (!userId || survey.userId !== userId) {
+        return apiError("Survey is not available", 403);
+      }
     }
 
     // Check if survey is closed

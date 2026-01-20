@@ -21,6 +21,7 @@ import {
   Calendar,
   Mail,
   ArrowLeft,
+  ArrowRight,
   Loader2,
   Link as LinkIcon,
   Lock,
@@ -107,7 +108,7 @@ const accessTypeOptions: { value: AccessType; label: string; description: string
 
 interface SkipCondition {
   questionId: string;
-  operator: "equals" | "not_equals" | "contains" | "greater_than" | "less_than";
+  operator: "equals" | "not_equals" | "contains" | "greater_than" | "less_than" | "is_empty" | "is_not_empty";
   value: string;
 }
 
@@ -115,6 +116,29 @@ interface SkipLogic {
   enabled: boolean;
   conditions: SkipCondition[];
   logic: "all" | "any";
+}
+
+interface BranchRule {
+  conditions: SkipCondition[];
+  logic: "all" | "any";
+  action: { type: "jump"; targetQuestionId: string } | { type: "end" };
+}
+
+interface BranchLogic {
+  enabled: boolean;
+  rules: BranchRule[];
+  defaultAction?: "next" | "end";
+}
+
+interface CarryForward {
+  enabled: boolean;
+  sourceQuestionId: string;
+  mode: "selected" | "not_selected" | "all";
+}
+
+interface OptionSource {
+  type: "static" | "carry_forward";
+  carryForward?: CarryForward;
 }
 
 interface Question {
@@ -126,6 +150,8 @@ interface Question {
   options?: string[];
   settings?: {
     skipLogic?: SkipLogic;
+    branchLogic?: BranchLogic;
+    optionSource?: OptionSource;
     scaleMin?: number;
     scaleMax?: number;
     scaleLabels?: Record<number, string>;
@@ -592,6 +618,8 @@ function SortableQuestion({
   deleteOption,
 }: SortableQuestionProps) {
   const [showSkipLogic, setShowSkipLogic] = useState(false);
+  const [showBranchLogic, setShowBranchLogic] = useState(false);
+  const [showCarryForward, setShowCarryForward] = useState(false);
   const {
     attributes,
     listeners,
@@ -609,7 +637,9 @@ function SortableQuestion({
   };
 
   const previousQuestions = allQuestions.slice(0, index);
+  const followingQuestions = allQuestions.slice(index + 1);
   const skipLogic = question.settings?.skipLogic;
+  const branchLogic = question.settings?.branchLogic;
 
   const toggleSkipLogic = () => {
     if (skipLogic?.enabled) {
@@ -683,6 +713,196 @@ function SortableQuestion({
     return [];
   };
 
+  // Branch logic helpers
+  const toggleBranchLogic = () => {
+    if (branchLogic?.enabled) {
+      updateQuestion(question.id, {
+        settings: { ...question.settings, branchLogic: undefined },
+      });
+      setShowBranchLogic(false);
+    } else {
+      setShowBranchLogic(true);
+    }
+  };
+
+  const addBranchRule = () => {
+    if (previousQuestions.length === 0) return;
+    const newRule: BranchRule = {
+      conditions: [{
+        questionId: previousQuestions.length > 0 ? previousQuestions[0].id : question.id,
+        operator: "equals",
+        value: "",
+      }],
+      logic: "all",
+      action: { type: "jump", targetQuestionId: followingQuestions.length > 0 ? followingQuestions[0].id : "" },
+    };
+    updateQuestion(question.id, {
+      settings: {
+        ...question.settings,
+        branchLogic: {
+          enabled: true,
+          rules: [...(branchLogic?.rules || []), newRule],
+          defaultAction: branchLogic?.defaultAction || "next",
+        },
+      },
+    });
+  };
+
+  const updateBranchRule = (ruleIndex: number, updates: Partial<BranchRule>) => {
+    if (!branchLogic) return;
+    const newRules = [...branchLogic.rules];
+    newRules[ruleIndex] = { ...newRules[ruleIndex], ...updates };
+    updateQuestion(question.id, {
+      settings: {
+        ...question.settings,
+        branchLogic: { ...branchLogic, rules: newRules },
+      },
+    });
+  };
+
+  const removeBranchRule = (ruleIndex: number) => {
+    if (!branchLogic) return;
+    const newRules = branchLogic.rules.filter((_, i) => i !== ruleIndex);
+    if (newRules.length === 0) {
+      updateQuestion(question.id, {
+        settings: { ...question.settings, branchLogic: undefined },
+      });
+      setShowBranchLogic(false);
+    } else {
+      updateQuestion(question.id, {
+        settings: {
+          ...question.settings,
+          branchLogic: { ...branchLogic, rules: newRules },
+        },
+      });
+    }
+  };
+
+  const updateBranchRuleCondition = (
+    ruleIndex: number,
+    conditionIndex: number,
+    updates: Partial<SkipCondition>
+  ) => {
+    if (!branchLogic) return;
+    const newRules = [...branchLogic.rules];
+    const newConditions = [...newRules[ruleIndex].conditions];
+    newConditions[conditionIndex] = { ...newConditions[conditionIndex], ...updates };
+    newRules[ruleIndex] = { ...newRules[ruleIndex], conditions: newConditions };
+    updateQuestion(question.id, {
+      settings: {
+        ...question.settings,
+        branchLogic: { ...branchLogic, rules: newRules },
+      },
+    });
+  };
+
+  const addBranchRuleCondition = (ruleIndex: number) => {
+    if (!branchLogic || previousQuestions.length === 0) return;
+    const newRules = [...branchLogic.rules];
+    newRules[ruleIndex] = {
+      ...newRules[ruleIndex],
+      conditions: [
+        ...newRules[ruleIndex].conditions,
+        { questionId: previousQuestions[0].id, operator: "equals", value: "" },
+      ],
+    };
+    updateQuestion(question.id, {
+      settings: {
+        ...question.settings,
+        branchLogic: { ...branchLogic, rules: newRules },
+      },
+    });
+  };
+
+  const removeBranchRuleCondition = (ruleIndex: number, conditionIndex: number) => {
+    if (!branchLogic) return;
+    const newRules = [...branchLogic.rules];
+    newRules[ruleIndex] = {
+      ...newRules[ruleIndex],
+      conditions: newRules[ruleIndex].conditions.filter((_, i) => i !== conditionIndex),
+    };
+    // If no conditions left, remove the rule
+    if (newRules[ruleIndex].conditions.length === 0) {
+      removeBranchRule(ruleIndex);
+      return;
+    }
+    updateQuestion(question.id, {
+      settings: {
+        ...question.settings,
+        branchLogic: { ...branchLogic, rules: newRules },
+      },
+    });
+  };
+
+  // Carry-forward helpers
+  const optionSource = question.settings?.optionSource;
+  const carryForward = optionSource?.carryForward;
+
+  // Filter to previous questions that have options
+  const previousQuestionsWithOptions = previousQuestions.filter((q) =>
+    ["SINGLE_CHOICE", "MULTIPLE_CHOICE", "DROPDOWN", "RANKING", "MATRIX", "CONSTANT_SUM", "IMAGE_CHOICE"].includes(q.type)
+  );
+
+  // Check if this question type supports carry-forward
+  const supportsCarryForward = ["SINGLE_CHOICE", "MULTIPLE_CHOICE", "DROPDOWN", "RANKING", "MATRIX", "CONSTANT_SUM", "IMAGE_CHOICE"].includes(question.type);
+
+  const toggleCarryForward = () => {
+    if (carryForward?.enabled) {
+      updateQuestion(question.id, {
+        settings: { ...question.settings, optionSource: undefined },
+      });
+      setShowCarryForward(false);
+    } else {
+      setShowCarryForward(true);
+    }
+  };
+
+  const enableCarryForward = (sourceQuestionId: string) => {
+    updateQuestion(question.id, {
+      settings: {
+        ...question.settings,
+        optionSource: {
+          type: "carry_forward",
+          carryForward: {
+            enabled: true,
+            sourceQuestionId,
+            mode: "selected",
+          },
+        },
+      },
+    });
+  };
+
+  const updateCarryForward = (updates: Partial<CarryForward>) => {
+    if (!carryForward) return;
+    updateQuestion(question.id, {
+      settings: {
+        ...question.settings,
+        optionSource: {
+          type: "carry_forward",
+          carryForward: { ...carryForward, ...updates },
+        },
+      },
+    });
+  };
+
+  const disableCarryForward = () => {
+    updateQuestion(question.id, {
+      settings: { ...question.settings, optionSource: undefined },
+    });
+    setShowCarryForward(false);
+  };
+
+  // Insert answer reference into title or description
+  const insertAnswerRef = (questionId: string, field: "title" | "description") => {
+    const ref = `{{${questionId}}}`;
+    if (field === "title") {
+      updateQuestion(question.id, { title: question.title + ref });
+    } else {
+      updateQuestion(question.id, { description: (question.description || "") + ref });
+    }
+  };
+
   return (
     <Card ref={setNodeRef} style={style} className="group">
       <CardContent className="p-6">
@@ -706,19 +926,75 @@ function SortableQuestion({
                   Conditional
                 </Badge>
               )}
+              {branchLogic?.enabled && (
+                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                  <GitBranch className="w-3 h-3 mr-1" />
+                  Branching
+                </Badge>
+              )}
             </div>
-            <Input
-              placeholder="Question title"
-              value={question.title}
-              onChange={(e) => updateQuestion(question.id, { title: e.target.value })}
-              className="text-lg font-medium border-0 px-0 focus-visible:ring-0 bg-transparent placeholder:text-[#6b6b7b]/50"
-            />
-            <Input
-              placeholder="Description (optional)"
-              value={question.description || ""}
-              onChange={(e) => updateQuestion(question.id, { description: e.target.value })}
-              className="mt-1 text-sm border-0 px-0 focus-visible:ring-0 bg-transparent placeholder:text-[#6b6b7b]/50"
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Question title"
+                value={question.title}
+                onChange={(e) => updateQuestion(question.id, { title: e.target.value })}
+                className="flex-1 text-lg font-medium border-0 px-0 focus-visible:ring-0 bg-transparent placeholder:text-[#6b6b7b]/50"
+              />
+              {previousQuestions.length > 0 && (
+                <div className="relative group/insert">
+                  <button
+                    className="text-xs text-[#6b6b7b] hover:text-[#1a1a2e] flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-100"
+                    title="Insert answer from previous question"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Insert
+                  </button>
+                  <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[200px] hidden group-hover/insert:block">
+                    <div className="px-3 py-1 text-xs font-medium text-gray-500 border-b">Insert answer from:</div>
+                    {previousQuestions.map((q, i) => (
+                      <button
+                        key={q.id}
+                        onClick={() => insertAnswerRef(q.id, "title")}
+                        className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 truncate"
+                      >
+                        Q{i + 1}: {q.title.slice(0, 30)}{q.title.length > 30 ? "..." : ""}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Description (optional)"
+                value={question.description || ""}
+                onChange={(e) => updateQuestion(question.id, { description: e.target.value })}
+                className="flex-1 mt-1 text-sm border-0 px-0 focus-visible:ring-0 bg-transparent placeholder:text-[#6b6b7b]/50"
+              />
+              {previousQuestions.length > 0 && (
+                <div className="relative group/insertdesc">
+                  <button
+                    className="text-xs text-[#6b6b7b] hover:text-[#1a1a2e] flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-100"
+                    title="Insert answer from previous question"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Insert
+                  </button>
+                  <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[200px] hidden group-hover/insertdesc:block">
+                    <div className="px-3 py-1 text-xs font-medium text-gray-500 border-b">Insert answer from:</div>
+                    {previousQuestions.map((q, i) => (
+                      <button
+                        key={q.id}
+                        onClick={() => insertAnswerRef(q.id, "description")}
+                        className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 truncate"
+                      >
+                        Q{i + 1}: {q.title.slice(0, 30)}{q.title.length > 30 ? "..." : ""}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {(question.type === "SINGLE_CHOICE" || question.type === "MULTIPLE_CHOICE") && (
               <div className="mt-4 space-y-2">
@@ -1508,6 +1784,273 @@ function SortableQuestion({
               </div>
             )}
 
+            {/* Branch Logic UI */}
+            {(showBranchLogic || branchLogic?.enabled) && (
+              <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-blue-700">
+                    <GitBranch className="w-4 h-4" />
+                    After this question, go to...
+                  </div>
+                  <button
+                    onClick={() => {
+                      updateQuestion(question.id, {
+                        settings: { ...question.settings, branchLogic: undefined },
+                      });
+                      setShowBranchLogic(false);
+                    }}
+                    className="text-blue-400 hover:text-blue-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Default action */}
+                <div className="mb-4 flex items-center gap-2 text-sm text-blue-600">
+                  <span>Default:</span>
+                  <select
+                    value={branchLogic?.defaultAction || "next"}
+                    onChange={(e) =>
+                      updateQuestion(question.id, {
+                        settings: {
+                          ...question.settings,
+                          branchLogic: {
+                            ...branchLogic,
+                            enabled: true,
+                            rules: branchLogic?.rules || [],
+                            defaultAction: e.target.value as "next" | "end",
+                          },
+                        },
+                      })
+                    }
+                    className="text-sm px-2 py-1 rounded border border-blue-200 bg-white"
+                  >
+                    <option value="next">Continue to next question</option>
+                    <option value="end">End survey</option>
+                  </select>
+                </div>
+
+                {/* Branch rules */}
+                <div className="space-y-4">
+                  {branchLogic?.rules?.map((rule, ruleIndex) => (
+                    <div key={ruleIndex} className="p-3 bg-white rounded border border-blue-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-blue-700">Rule {ruleIndex + 1}</span>
+                        <button
+                          onClick={() => removeBranchRule(ruleIndex)}
+                          className="text-blue-400 hover:text-red-500"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      {/* Logic selector for multiple conditions */}
+                      {rule.conditions.length > 1 && (
+                        <div className="mb-2">
+                          <select
+                            value={rule.logic}
+                            onChange={(e) => updateBranchRule(ruleIndex, { logic: e.target.value as "all" | "any" })}
+                            className="text-xs px-2 py-1 rounded border border-blue-200 bg-white text-blue-700"
+                          >
+                            <option value="all">ALL conditions match</option>
+                            <option value="any">ANY condition matches</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Conditions */}
+                      <div className="space-y-2 mb-3">
+                        {rule.conditions.map((condition, conditionIndex) => {
+                          const sourceQuestion = allQuestions.find((q) => q.id === condition.questionId);
+                          const hasOptions = sourceQuestion && (
+                            sourceQuestion.type === "SINGLE_CHOICE" ||
+                            sourceQuestion.type === "MULTIPLE_CHOICE" ||
+                            sourceQuestion.type === "RATING" ||
+                            sourceQuestion.type === "YES_NO"
+                          );
+
+                          return (
+                            <div key={conditionIndex} className="flex items-center gap-2 flex-wrap text-sm">
+                              <span className="text-blue-600">If</span>
+                              <select
+                                value={condition.questionId}
+                                onChange={(e) => updateBranchRuleCondition(ruleIndex, conditionIndex, { questionId: e.target.value, value: "" })}
+                                className="px-2 py-1 rounded border border-blue-200 bg-white max-w-[150px] text-xs"
+                              >
+                                {allQuestions.slice(0, index + 1).map((q, i) => (
+                                  <option key={q.id} value={q.id}>
+                                    Q{i + 1}: {q.title.slice(0, 20)}{q.title.length > 20 ? "..." : ""}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <select
+                                value={condition.operator}
+                                onChange={(e) => updateBranchRuleCondition(ruleIndex, conditionIndex, { operator: e.target.value as SkipCondition["operator"] })}
+                                className="px-2 py-1 rounded border border-blue-200 bg-white text-xs"
+                              >
+                                <option value="equals">equals</option>
+                                <option value="not_equals">does not equal</option>
+                                <option value="contains">contains</option>
+                                <option value="is_empty">is empty</option>
+                                <option value="is_not_empty">is not empty</option>
+                                {(sourceQuestion?.type === "NUMBER" || sourceQuestion?.type === "RATING" || sourceQuestion?.type === "NPS") && (
+                                  <>
+                                    <option value="greater_than">greater than</option>
+                                    <option value="less_than">less than</option>
+                                  </>
+                                )}
+                              </select>
+
+                              {condition.operator !== "is_empty" && condition.operator !== "is_not_empty" && (
+                                hasOptions ? (
+                                  <select
+                                    value={condition.value}
+                                    onChange={(e) => updateBranchRuleCondition(ruleIndex, conditionIndex, { value: e.target.value })}
+                                    className="px-2 py-1 rounded border border-blue-200 bg-white max-w-[150px] text-xs"
+                                  >
+                                    <option value="">Select...</option>
+                                    {getQuestionOptions(condition.questionId).map((opt) => (
+                                      <option key={opt} value={opt}>{opt}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <Input
+                                    value={condition.value}
+                                    onChange={(e) => updateBranchRuleCondition(ruleIndex, conditionIndex, { value: e.target.value })}
+                                    placeholder="Value"
+                                    className="h-7 w-24 text-xs"
+                                  />
+                                )
+                              )}
+
+                              {rule.conditions.length > 1 && (
+                                <button
+                                  onClick={() => removeBranchRuleCondition(ruleIndex, conditionIndex)}
+                                  className="text-blue-400 hover:text-red-500"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <button
+                        onClick={() => addBranchRuleCondition(ruleIndex)}
+                        className="text-xs text-blue-600 hover:text-blue-800 mb-3"
+                      >
+                        + Add condition
+                      </button>
+
+                      {/* Action */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-blue-100">
+                        <span className="text-sm text-blue-600">Then:</span>
+                        <select
+                          value={rule.action.type === "end" ? "end" : rule.action.targetQuestionId}
+                          onChange={(e) => {
+                            if (e.target.value === "end") {
+                              updateBranchRule(ruleIndex, { action: { type: "end" } });
+                            } else {
+                              updateBranchRule(ruleIndex, { action: { type: "jump", targetQuestionId: e.target.value } });
+                            }
+                          }}
+                          className="text-sm px-2 py-1 rounded border border-blue-200 bg-white"
+                        >
+                          <option value="end">End survey</option>
+                          {followingQuestions.map((q, i) => (
+                            <option key={q.id} value={q.id}>
+                              Jump to Q{index + 2 + i}: {q.title.slice(0, 25)}{q.title.length > 25 ? "..." : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={addBranchRule}
+                  className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 mt-3"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add rule
+                </button>
+              </div>
+            )}
+
+            {/* Carry-Forward Configuration */}
+            {(showCarryForward || carryForward?.enabled) && supportsCarryForward && previousQuestionsWithOptions.length > 0 && (
+              <div className="mt-4 p-4 bg-orange-50 rounded-lg border border-orange-200">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-orange-700">
+                    <ArrowRight className="w-4 h-4" />
+                    Carry forward options from a previous question
+                  </div>
+                  <button
+                    onClick={disableCarryForward}
+                    className="text-orange-400 hover:text-orange-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <p className="text-xs text-orange-600 mb-3">
+                  Show only options that the respondent selected (or didn&apos;t select) in a previous question.
+                </p>
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm text-orange-700">Source question:</span>
+                    <select
+                      value={carryForward?.sourceQuestionId || ""}
+                      onChange={(e) => {
+                        if (!carryForward?.enabled) {
+                          enableCarryForward(e.target.value);
+                        } else {
+                          updateCarryForward({ sourceQuestionId: e.target.value });
+                        }
+                      }}
+                      className="text-sm px-2 py-1.5 rounded border border-orange-200 bg-white max-w-[250px]"
+                    >
+                      <option value="">Select a question...</option>
+                      {previousQuestionsWithOptions.map((q, i) => (
+                        <option key={q.id} value={q.id}>
+                          Q{allQuestions.findIndex(aq => aq.id === q.id) + 1}: {q.title.slice(0, 30)}{q.title.length > 30 ? "..." : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {carryForward?.enabled && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm text-orange-700">Show:</span>
+                      <select
+                        value={carryForward.mode}
+                        onChange={(e) => updateCarryForward({ mode: e.target.value as CarryForward["mode"] })}
+                        className="text-sm px-2 py-1.5 rounded border border-orange-200 bg-white"
+                      >
+                        <option value="selected">Only selected options</option>
+                        <option value="not_selected">Only NOT selected options</option>
+                        <option value="all">All options from source</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {carryForward?.enabled && (
+                  <p className="text-xs text-orange-500 mt-3 italic">
+                    {carryForward.mode === "selected"
+                      ? "This question will only show the options that the respondent selected in the source question."
+                      : carryForward.mode === "not_selected"
+                        ? "This question will only show options that the respondent did NOT select in the source question."
+                        : "This question will show all options from the source question."}
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#dcd6f6]">
               <div className="flex items-center gap-4">
                 {question.type !== "SECTION_HEADER" && (
@@ -1530,8 +2073,34 @@ function SortableQuestion({
                         : "text-[#6b6b7b] hover:text-[#1a1a2e]"
                     }`}
                   >
+                    <EyeOff className="w-4 h-4" />
+                    {skipLogic?.enabled ? "Edit visibility" : "Show/hide"}
+                  </button>
+                )}
+                {question.type !== "SECTION_HEADER" && followingQuestions.length > 0 && (
+                  <button
+                    onClick={toggleBranchLogic}
+                    className={`flex items-center gap-1 text-sm transition-colors ${
+                      branchLogic?.enabled
+                        ? "text-blue-600 hover:text-blue-800"
+                        : "text-[#6b6b7b] hover:text-[#1a1a2e]"
+                    }`}
+                  >
                     <GitBranch className="w-4 h-4" />
-                    {skipLogic?.enabled ? "Edit logic" : "Add logic"}
+                    {branchLogic?.enabled ? "Edit branching" : "Branching"}
+                  </button>
+                )}
+                {supportsCarryForward && previousQuestionsWithOptions.length > 0 && (
+                  <button
+                    onClick={toggleCarryForward}
+                    className={`flex items-center gap-1 text-sm transition-colors ${
+                      carryForward?.enabled
+                        ? "text-orange-600 hover:text-orange-800"
+                        : "text-[#6b6b7b] hover:text-[#1a1a2e]"
+                    }`}
+                  >
+                    <ArrowRight className="w-4 h-4" />
+                    {carryForward?.enabled ? "Edit carry-forward" : "Carry forward"}
                   </button>
                 )}
               </div>
