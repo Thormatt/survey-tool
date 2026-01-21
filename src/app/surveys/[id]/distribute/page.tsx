@@ -1151,7 +1151,7 @@ window.addEventListener('message', function(e) {
 
   if (sessionStorage.getItem(CONFIG.storageKey)) return;
 
-  var slideinTransform = CONFIG.displayMode === 'slidein' ? '${gtmSlideinPosition === "left" ? "translateX(-120%)" : "translateX(120%)"}' : '';
+  var slideinTransform = CONFIG.displayMode === 'slidein' ? '${slideinPosition === "bottom-left" ? "translateX(-120%)" : "translateX(120%)"}' : '';
   var styles = '.gtm-survey-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0); backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); z-index: 999999; display: flex; align-items: center; justify-content: center; padding: 20px; transition: background 0.3s ease-out, backdrop-filter 0.3s ease-out; }' +
     '.gtm-survey-overlay.visible { background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }' +
     '.gtm-survey-modal { background: #fff; border-radius: 20px; max-width: 550px; width: 100%; max-height: 90vh; overflow: hidden; position: relative; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.05); transform: translateY(30px) scale(0.9); opacity: 0; transition: transform 0.5s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease-out; }' +
