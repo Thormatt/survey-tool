@@ -168,6 +168,17 @@ export default function EmbedSurveyPage() {
 
   // Notify parent of height changes for auto-resize
   useEffect(() => {
+    const sendHeight = () => {
+      if (containerRef.current) {
+        const height = containerRef.current.scrollHeight;
+        postToParent("resize", { height });
+      }
+    };
+
+    // Send initial height after a short delay to ensure content is rendered
+    const initialTimer = setTimeout(sendHeight, 100);
+    const secondTimer = setTimeout(sendHeight, 500);
+
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         postToParent("resize", { height: entry.contentRect.height });
@@ -178,7 +189,11 @@ export default function EmbedSurveyPage() {
       observer.observe(containerRef.current);
     }
 
-    return () => observer.disconnect();
+    return () => {
+      clearTimeout(initialTimer);
+      clearTimeout(secondTimer);
+      observer.disconnect();
+    };
   }, []);
 
   // Notify parent when survey loads

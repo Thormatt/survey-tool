@@ -197,7 +197,7 @@ export default function DistributePage() {
   // Navigation state
   const [activeTab, setActiveTab] = useState<"link" | "website" | "email" | "alerts">("link");
   const [websiteStep, setWebsiteStep] = useState<"gallery" | "configure" | "install">("gallery");
-  const [installMethod, setInstallMethod] = useState<"javascript" | "gtm" | "wordpress">("javascript");
+  const [installMethod, setInstallMethod] = useState<"javascript" | "gtm" | "wordpress">("gtm");
 
   const updateSurvey = async (updates: Partial<Survey>) => {
     if (!survey) return;
@@ -326,22 +326,29 @@ window.addEventListener('message', function(e) {
   "
 >${popupButtonText}</button>
 
+<style>
+@keyframes surveyOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes surveyModalIn { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes surveyOverlayOut { from { opacity: 1; } to { opacity: 0; } }
+@keyframes surveyModalOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(20px) scale(0.95); } }
+</style>
 <script>
 function openSurveyPopup() {
   // Create overlay
   const overlay = document.createElement('div');
   overlay.id = 'survey-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;animation:surveyOverlayIn 0.3s ease-out;';
   overlay.onclick = function(e) { if(e.target === overlay) closeSurveyPopup(); };
 
   // Create modal container
   const modal = document.createElement('div');
-  modal.style.cssText = 'background:#fff;border-radius:16px;max-width:600px;width:100%;max-height:90vh;overflow:hidden;position:relative;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);';
+  modal.id = 'survey-modal';
+  modal.style.cssText = 'background:#fff;border-radius:16px;max-width:600px;width:100%;max-height:90vh;overflow:hidden;position:relative;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);animation:surveyModalIn 0.4s cubic-bezier(0.34,1.56,0.64,1);';
 
   // Close button
   const closeBtn = document.createElement('button');
   closeBtn.innerHTML = '&times;';
-  closeBtn.style.cssText = 'position:absolute;top:12px;right:12px;background:none;border:none;font-size:28px;cursor:pointer;color:#666;z-index:10;width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:50%;';
+  closeBtn.style.cssText = 'position:absolute;top:12px;right:12px;background:none;border:none;font-size:28px;cursor:pointer;color:#666;z-index:10;width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:50%;transition:background 0.2s;';
   closeBtn.onmouseover = function() { this.style.background = '#f0f0f0'; };
   closeBtn.onmouseout = function() { this.style.background = 'none'; };
   closeBtn.onclick = closeSurveyPopup;
@@ -372,9 +379,14 @@ function openSurveyPopup() {
 
 function closeSurveyPopup() {
   const overlay = document.getElementById('survey-overlay');
-  if (overlay) {
-    overlay.remove();
-    document.body.style.overflow = '';
+  const modal = document.getElementById('survey-modal');
+  if (overlay && modal) {
+    overlay.style.animation = 'surveyOverlayOut 0.2s ease-out forwards';
+    modal.style.animation = 'surveyModalOut 0.2s ease-out forwards';
+    setTimeout(function() {
+      overlay.remove();
+      document.body.style.overflow = '';
+    }, 200);
   }
 }
 </script>`;
@@ -413,13 +425,13 @@ function closeSurveyPopup() {
   box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
   z-index: 9999;
   overflow: hidden;
-  transform: translateY(20px);
+  transform: translateY(20px) scale(0.95);
   opacity: 0;
   visibility: hidden;
-  transition: transform 0.3s ease, opacity 0.3s ease, visibility 0.3s;
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out, visibility 0.3s;
 }
 #survey-slidein.open {
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
   opacity: 1;
   visibility: visible;
 }
@@ -512,7 +524,7 @@ window.addEventListener('message', function(e) {
   box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3);
   z-index: 9999;
   overflow: hidden;
-  transition: ${feedbackTabPosition === 'right' ? 'right' : 'left'} 0.3s ease;
+  transition: ${feedbackTabPosition === 'right' ? 'right' : 'left'} 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 #survey-feedback-panel.open {
   ${feedbackTabPosition === 'right' ? 'right: 0;' : 'left: 0;'}
@@ -879,54 +891,76 @@ window.addEventListener('message', function(e) {
   // Check if already shown this session
   if (sessionStorage.getItem(CONFIG.storageKey)) return;
 
+  // Slide-in direction based on position
+  var slideinTransform = '${slideinPosition === "bottom-left" ? "translateX(-120%)" : "translateX(120%)"}';
+
   // Styles (ES5 compatible - using string concatenation)
   var styles = '.gtm-survey-overlay {' +
     'position: fixed; top: 0; left: 0; right: 0; bottom: 0;' +
-    'background: rgba(0,0,0,0.5); z-index: 999999;' +
-    'display: flex; align-items: center; justify-content: center;' +
-    'padding: 20px; opacity: 0; transition: opacity 0.3s;' +
+    'background: rgba(0,0,0,0); backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px);' +
+    'z-index: 999999; display: flex; align-items: center; justify-content: center;' +
+    'padding: 20px; transition: background 0.3s ease-out, backdrop-filter 0.3s ease-out;' +
   '}' +
-  '.gtm-survey-overlay.visible { opacity: 1; }' +
+  '.gtm-survey-overlay.visible { background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }' +
   '.gtm-survey-modal {' +
-    'background: #fff; border-radius: 16px; max-width: 550px; width: 100%;' +
+    'background: #fff; border-radius: 20px; max-width: 550px; width: 100%;' +
     'max-height: 90vh; overflow: hidden; position: relative;' +
-    'box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3);' +
-    'transform: translateY(20px); transition: transform 0.3s;' +
+    'box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.05);' +
+    'transform: translateY(30px) scale(0.9); opacity: 0;' +
+    'transition: transform 0.5s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease-out;' +
   '}' +
-  '.gtm-survey-overlay.visible .gtm-survey-modal { transform: translateY(0); }' +
+  '.gtm-survey-overlay.visible .gtm-survey-modal { transform: translateY(0) scale(1); opacity: 1; }' +
   '.gtm-survey-close {' +
-    'position: absolute; top: 10px; right: 10px;' +
-    'background: rgba(0,0,0,0.1); border: none;' +
+    'position: absolute; top: 12px; right: 12px;' +
+    'background: rgba(0,0,0,0.08); border: none;' +
     'width: 32px; height: 32px; border-radius: 50%;' +
-    'cursor: pointer; font-size: 20px; z-index: 10;' +
+    'cursor: pointer; font-size: 18px; z-index: 10; color: #666;' +
+    'display: flex; align-items: center; justify-content: center;' +
+    'transition: all 0.2s ease;' +
   '}' +
-  '.gtm-survey-close:hover { background: rgba(0,0,0,0.2); }' +
+  '.gtm-survey-close:hover { background: rgba(0,0,0,0.15); transform: scale(1.1); }' +
   '.gtm-survey-iframe { width: 100%; height: 500px; border: none; }' +
   '.gtm-survey-slidein {' +
     'position: fixed; ${slideinPos}: 20px; bottom: 20px;' +
     'width: 400px; max-width: calc(100vw - 40px);' +
-    'background: #fff; border-radius: 16px;' +
-    'box-shadow: 0 10px 40px rgba(0,0,0,0.2); z-index: 999999;' +
-    'overflow: hidden; transform: translateY(100%); opacity: 0;' +
-    'transition: transform 0.4s ease, opacity 0.3s, height 0.3s ease;' +
+    'background: #fff; border-radius: 20px;' +
+    'box-shadow: 0 20px 60px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05); z-index: 999999;' +
+    'overflow: hidden; transform: ' + slideinTransform + ' scale(0.95); opacity: 0;' +
+    'transition: transform 0.5s cubic-bezier(0.34,1.56,0.64,1), opacity 0.4s ease-out, height 0.3s ease;' +
   '}' +
-  '.gtm-survey-slidein.visible { transform: translateY(0); opacity: 1; }' +
-  '.gtm-survey-slidein.minimized { height: 48px !important; }' +
+  '.gtm-survey-slidein.visible { transform: translateX(0) scale(1); opacity: 1; }' +
+  '.gtm-survey-slidein.minimized { height: 48px !important; transform: translateX(0) scale(1); }' +
   '.gtm-survey-slidein.minimized iframe { display: none; }' +
-  '.gtm-survey-slidein .gtm-header-btn { background: rgba(255,255,255,0.2); border: none; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 18px; color: #fff; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }' +
-  '.gtm-survey-slidein .gtm-header-btn:hover { background: rgba(255,255,255,0.3); }' +
+  '.gtm-survey-slidein.minimized .gtm-survey-loader { display: none; }' +
+  '.gtm-survey-slidein .gtm-header-btn {' +
+    'background: rgba(255,255,255,0.2); border: none; width: 28px; height: 28px;' +
+    'border-radius: 8px; cursor: pointer; font-size: 18px; color: #fff;' +
+    'display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;' +
+  '}' +
+  '.gtm-survey-slidein .gtm-header-btn:hover { background: rgba(255,255,255,0.35); transform: scale(1.1); }' +
   '.gtm-survey-banner {' +
     'position: fixed; bottom: 0; left: 0; right: 0;' +
-    'background: #fff; box-shadow: 0 -4px 20px rgba(0,0,0,0.15);' +
-    'z-index: 999999; transform: translateY(100%); transition: transform 0.4s ease;' +
+    'background: #fff; box-shadow: 0 -8px 30px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);' +
+    'z-index: 999999; transform: translateY(100%); transition: transform 0.5s cubic-bezier(0.34,1.56,0.64,1);' +
   '}' +
   '.gtm-survey-banner.visible { transform: translateY(0); }' +
   '.gtm-survey-banner iframe { width: 100%; height: 400px; border: none; }' +
   '.gtm-survey-header {' +
     'background: ' + CONFIG.accentColor + ';' +
-    'color: #fff; padding: 12px 16px; font-weight: 600;' +
+    'color: #fff; padding: 14px 16px; font-weight: 600; font-size: 15px;' +
     'display: flex; justify-content: space-between; align-items: center;' +
-  '}';
+  '}' +
+  '.gtm-survey-loader {' +
+    'display: flex; flex-direction: column; align-items: center; justify-content: center;' +
+    'padding: 48px 20px; gap: 16px;' +
+  '}' +
+  '.gtm-survey-spinner {' +
+    'width: 36px; height: 36px; border: 3px solid #f0f0f0;' +
+    'border-top-color: ' + CONFIG.accentColor + '; border-radius: 50%;' +
+    'animation: gtmSpin 0.8s cubic-bezier(0.4,0,0.2,1) infinite;' +
+  '}' +
+  '@keyframes gtmSpin { to { transform: rotate(360deg); } }' +
+  '.gtm-survey-loader-text { color: #888; font-size: 14px; font-weight: 500; }';
 
   // Inject styles
   var styleEl = document.createElement('style');
@@ -936,12 +970,19 @@ window.addEventListener('message', function(e) {
   function showSurvey() {
     sessionStorage.setItem(CONFIG.storageKey, 'true');
 
+    // Loading skeleton HTML
+    var loaderHtml = '<div class="gtm-survey-loader" id="gtm-loader">' +
+      '<div class="gtm-survey-spinner"></div>' +
+      '<span class="gtm-survey-loader-text">Loading survey...</span>' +
+    '</div>';
+
     if (CONFIG.displayMode === 'popup') {
       var overlay = document.createElement('div');
       overlay.className = 'gtm-survey-overlay';
       overlay.innerHTML = '<div class="gtm-survey-modal">' +
-        '<button class="gtm-survey-close" onclick="this.closest(\\'.gtm-survey-overlay\\').remove()">&times;</button>' +
-        '<iframe class="gtm-survey-iframe" src="' + CONFIG.surveyUrl + '" allow="clipboard-write"></iframe>' +
+        '<button class="gtm-survey-close" onclick="this.closest(\\'.gtm-survey-overlay\\').remove();document.body.style.overflow=\\'\\';">&times;</button>' +
+        loaderHtml +
+        '<iframe class="gtm-survey-iframe" style="display:none;" src="' + CONFIG.surveyUrl + '" allow="clipboard-write" onload="this.style.display=\\'block\\';var l=document.getElementById(\\'gtm-loader\\');if(l)l.remove();"></iframe>' +
       '</div>';
       document.body.appendChild(overlay);
       document.body.style.overflow = 'hidden';
@@ -964,8 +1005,21 @@ window.addEventListener('message', function(e) {
           '<button class="gtm-header-btn" onclick="this.closest(\\'.gtm-survey-slidein\\').remove()" title="Close">&times;</button>' +
         '</div>' +
       '</div>' +
-      '<iframe style="width:100%;height:520px;border:none;" src="' + CONFIG.surveyUrl + '" allow="clipboard-write"></iframe>';
+      '<div class="gtm-survey-content" style="position:relative;min-height:400px;">' +
+        loaderHtml +
+        '<iframe id="gtm-survey-frame" style="width:100%;min-height:400px;border:none;display:none;" src="' + CONFIG.surveyUrl + '" allow="clipboard-write"></iframe>' +
+      '</div>';
       document.body.appendChild(slidein);
+
+      // Handle iframe load
+      var frame = document.getElementById('gtm-survey-frame');
+      if (frame) {
+        frame.onload = function() {
+          frame.style.display = 'block';
+          var loader = document.getElementById('gtm-loader');
+          if (loader) loader.remove();
+        };
+      }
       setTimeout(function() { slidein.classList.add('visible'); }, 10);
     }
     else if (CONFIG.displayMode === 'banner') {
@@ -975,14 +1029,27 @@ window.addEventListener('message', function(e) {
         '<span>We\\'d love your feedback!</span>' +
         '<button onclick="this.closest(\\'.gtm-survey-banner\\').remove()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&times;</button>' +
       '</div>' +
-      '<iframe style="width:100%;height:400px;border:none;" src="' + CONFIG.surveyUrl + '" allow="clipboard-write"></iframe>';
+      loaderHtml +
+      '<iframe id="gtm-banner-frame" style="width:100%;height:400px;border:none;display:none;" src="' + CONFIG.surveyUrl + '" allow="clipboard-write" onload="this.style.display=\\'block\\';var l=document.getElementById(\\'gtm-loader\\');if(l)l.remove();"></iframe>';
       document.body.appendChild(banner);
       setTimeout(function() { banner.classList.add('visible'); }, 10);
     }
 
-    // Listen for completion
+    // Listen for messages from iframe
     window.addEventListener('message', function(e) {
-      if (e.data && e.data.type === 'survey:completed') {
+      if (!e.data || !e.data.type) return;
+
+      // Handle resize
+      if (e.data.type === 'survey:resize' && e.data.height) {
+        var frame = document.getElementById('gtm-survey-frame') || document.getElementById('gtm-banner-frame');
+        if (frame) {
+          var maxHeight = window.innerHeight - 100;
+          frame.style.height = Math.min(e.data.height + 20, maxHeight) + 'px';
+        }
+      }
+
+      // Handle completion
+      if (e.data.type === 'survey:completed') {
         window.dataLayer = window.dataLayer || [];
         window.dataLayer.push({
           event: 'surveyCompleted',
@@ -1084,23 +1151,29 @@ window.addEventListener('message', function(e) {
 
   if (sessionStorage.getItem(CONFIG.storageKey)) return;
 
-  var styles = '.gtm-survey-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 999999; display: flex; align-items: center; justify-content: center; padding: 20px; opacity: 0; transition: opacity 0.3s; }' +
-    '.gtm-survey-overlay.visible { opacity: 1; }' +
-    '.gtm-survey-modal { background: #fff; border-radius: 16px; max-width: 550px; width: 100%; max-height: 90vh; overflow: hidden; position: relative; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); transform: translateY(20px); transition: transform 0.3s; }' +
-    '.gtm-survey-overlay.visible .gtm-survey-modal { transform: translateY(0); }' +
-    '.gtm-survey-close { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.1); border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 20px; z-index: 10; }' +
-    '.gtm-survey-close:hover { background: rgba(0,0,0,0.2); }' +
+  var slideinTransform = CONFIG.displayMode === 'slidein' ? '${gtmSlideinPosition === "left" ? "translateX(-120%)" : "translateX(120%)"}' : '';
+  var styles = '.gtm-survey-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0); backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); z-index: 999999; display: flex; align-items: center; justify-content: center; padding: 20px; transition: background 0.3s ease-out, backdrop-filter 0.3s ease-out; }' +
+    '.gtm-survey-overlay.visible { background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }' +
+    '.gtm-survey-modal { background: #fff; border-radius: 20px; max-width: 550px; width: 100%; max-height: 90vh; overflow: hidden; position: relative; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.05); transform: translateY(30px) scale(0.9); opacity: 0; transition: transform 0.5s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease-out; }' +
+    '.gtm-survey-overlay.visible .gtm-survey-modal { transform: translateY(0) scale(1); opacity: 1; }' +
+    '.gtm-survey-close { position: absolute; top: 12px; right: 12px; background: rgba(0,0,0,0.08); border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 18px; z-index: 10; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; color: #666; }' +
+    '.gtm-survey-close:hover { background: rgba(0,0,0,0.15); transform: scale(1.1); }' +
     '.gtm-survey-iframe { width: 100%; height: 500px; border: none; }' +
-    '.gtm-survey-slidein { position: fixed; ${slideinPos}: 20px; bottom: 20px; width: 400px; max-width: calc(100vw - 40px); background: #fff; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); z-index: 999999; overflow: hidden; transform: translateY(100%); opacity: 0; transition: transform 0.4s ease, opacity 0.3s, height 0.3s ease; }' +
-    '.gtm-survey-slidein.visible { transform: translateY(0); opacity: 1; }' +
-    '.gtm-survey-slidein.minimized { height: 48px !important; }' +
+    '.gtm-survey-slidein { position: fixed; ${slideinPos}: 20px; bottom: 20px; width: 400px; max-width: calc(100vw - 40px); background: #fff; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05); z-index: 999999; overflow: hidden; transform: ' + slideinTransform + ' scale(0.95); opacity: 0; transition: transform 0.5s cubic-bezier(0.34,1.56,0.64,1), opacity 0.4s ease-out, height 0.3s ease; }' +
+    '.gtm-survey-slidein.visible { transform: translateX(0) scale(1); opacity: 1; }' +
+    '.gtm-survey-slidein.minimized { height: 48px !important; transform: translateX(0) scale(1); }' +
     '.gtm-survey-slidein.minimized iframe { display: none; }' +
-    '.gtm-survey-slidein .gtm-header-btn { background: rgba(255,255,255,0.2); border: none; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 18px; color: #fff; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }' +
-    '.gtm-survey-slidein .gtm-header-btn:hover { background: rgba(255,255,255,0.3); }' +
-    '.gtm-survey-banner { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; box-shadow: 0 -4px 20px rgba(0,0,0,0.15); z-index: 999999; transform: translateY(100%); transition: transform 0.4s ease; }' +
+    '.gtm-survey-slidein.minimized .gtm-survey-loader { display: none; }' +
+    '.gtm-survey-slidein .gtm-header-btn { background: rgba(255,255,255,0.2); border: none; width: 28px; height: 28px; border-radius: 8px; cursor: pointer; font-size: 18px; color: #fff; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; }' +
+    '.gtm-survey-slidein .gtm-header-btn:hover { background: rgba(255,255,255,0.35); transform: scale(1.1); }' +
+    '.gtm-survey-banner { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; box-shadow: 0 -8px 30px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05); z-index: 999999; transform: translateY(100%); transition: transform 0.5s cubic-bezier(0.34,1.56,0.64,1); }' +
     '.gtm-survey-banner.visible { transform: translateY(0); }' +
     '.gtm-survey-banner iframe { width: 100%; height: 400px; border: none; }' +
-    '.gtm-survey-header { background: ' + CONFIG.accentColor + '; color: #fff; padding: 12px 16px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }';
+    '.gtm-survey-header { background: ' + CONFIG.accentColor + '; color: #fff; padding: 14px 16px; font-weight: 600; font-size: 15px; display: flex; justify-content: space-between; align-items: center; }' +
+    '.gtm-survey-loader { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 20px; gap: 16px; }' +
+    '.gtm-survey-spinner { width: 36px; height: 36px; border: 3px solid #f0f0f0; border-top-color: ' + CONFIG.accentColor + '; border-radius: 50%; animation: gtmSpin 0.8s cubic-bezier(0.4,0,0.2,1) infinite; }' +
+    '@keyframes gtmSpin { to { transform: rotate(360deg); } }' +
+    '.gtm-survey-loader-text { color: #888; font-size: 14px; font-weight: 500; }';
 
   var styleEl = document.createElement('style');
   styleEl.textContent = styles;
@@ -1111,7 +1184,7 @@ window.addEventListener('message', function(e) {
     if (CONFIG.displayMode === 'popup') {
       var overlay = document.createElement('div');
       overlay.className = 'gtm-survey-overlay';
-      overlay.innerHTML = '<div class="gtm-survey-modal"><button class="gtm-survey-close" onclick="this.closest(\\'.gtm-survey-overlay\\').remove()">&times;</button><iframe class="gtm-survey-iframe" src="' + CONFIG.surveyUrl + '" allow="clipboard-write"></iframe></div>';
+      overlay.innerHTML = '<div class="gtm-survey-modal"><button class="gtm-survey-close" onclick="this.closest(\\'.gtm-survey-overlay\\').remove();document.body.style.overflow=\\'\\'">&times;</button><div id="gtm-popup-loader" class="gtm-survey-loader"><div class="gtm-survey-spinner"></div><div class="gtm-survey-loader-text">Loading survey...</div></div><iframe id="gtm-survey-frame" class="gtm-survey-iframe" style="display:none" src="' + CONFIG.surveyUrl + '" allow="clipboard-write" onload="document.getElementById(\\'gtm-popup-loader\\').style.display=\\'none\\';this.style.display=\\'block\\'"></iframe></div>';
       document.body.appendChild(overlay);
       document.body.style.overflow = 'hidden';
       setTimeout(function() { overlay.classList.add('visible'); }, 10);
@@ -1120,18 +1193,26 @@ window.addEventListener('message', function(e) {
       var slidein = document.createElement('div');
       slidein.className = 'gtm-survey-slidein';
       slidein.id = 'gtm-survey-slidein';
-      slidein.innerHTML = '<div class="gtm-survey-header"><span>Quick Feedback</span><div style="display:flex;gap:6px;"><button class="gtm-header-btn" onclick="var s=document.getElementById(\\'gtm-survey-slidein\\');s.classList.toggle(\\'minimized\\');this.innerHTML=s.classList.contains(\\'minimized\\')?\\'+\\':\\'\\u2212\\';" title="Minimize">\\u2212</button><button class="gtm-header-btn" onclick="this.closest(\\'.gtm-survey-slidein\\').remove()" title="Close">&times;</button></div></div><iframe style="width:100%;height:520px;border:none;" src="' + CONFIG.surveyUrl + '" allow="clipboard-write"></iframe>';
+      slidein.innerHTML = '<div class="gtm-survey-header"><span>Quick Feedback</span><div style="display:flex;gap:6px;"><button class="gtm-header-btn" onclick="var s=document.getElementById(\\'gtm-survey-slidein\\');s.classList.toggle(\\'minimized\\');this.innerHTML=s.classList.contains(\\'minimized\\')?\\'+\\':\\'\\u2212\\';" title="Minimize">\\u2212</button><button class="gtm-header-btn" onclick="this.closest(\\'.gtm-survey-slidein\\').remove()" title="Close">&times;</button></div></div><div id="gtm-slidein-loader" class="gtm-survey-loader"><div class="gtm-survey-spinner"></div><div class="gtm-survey-loader-text">Loading survey...</div></div><iframe id="gtm-survey-frame" style="width:100%;height:520px;border:none;display:none" src="' + CONFIG.surveyUrl + '" allow="clipboard-write" onload="document.getElementById(\\'gtm-slidein-loader\\').style.display=\\'none\\';this.style.display=\\'block\\'"></iframe>';
       document.body.appendChild(slidein);
       setTimeout(function() { slidein.classList.add('visible'); }, 10);
     } else if (CONFIG.displayMode === 'banner') {
       var banner = document.createElement('div');
       banner.className = 'gtm-survey-banner';
-      banner.innerHTML = '<div class="gtm-survey-header"><span>We\\'d love your feedback!</span><button onclick="this.closest(\\'.gtm-survey-banner\\').remove()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&times;</button></div><iframe style="width:100%;height:400px;border:none;" src="' + CONFIG.surveyUrl + '" allow="clipboard-write"></iframe>';
+      banner.innerHTML = '<div class="gtm-survey-header"><span>We\\'d love your feedback!</span><button onclick="this.closest(\\'.gtm-survey-banner\\').remove()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&times;</button></div><div id="gtm-banner-loader" class="gtm-survey-loader"><div class="gtm-survey-spinner"></div><div class="gtm-survey-loader-text">Loading survey...</div></div><iframe id="gtm-banner-frame" style="width:100%;height:400px;border:none;display:none" src="' + CONFIG.surveyUrl + '" allow="clipboard-write" onload="document.getElementById(\\'gtm-banner-loader\\').style.display=\\'none\\';this.style.display=\\'block\\'"></iframe>';
       document.body.appendChild(banner);
       setTimeout(function() { banner.classList.add('visible'); }, 10);
     }
     window.addEventListener('message', function(e) {
-      if (e.data && e.data.type === 'survey:completed') {
+      if (!e.data || !e.data.type) return;
+      if (e.data.type === 'survey:resize' && e.data.height) {
+        var frame = document.getElementById('gtm-survey-frame') || document.getElementById('gtm-banner-frame');
+        if (frame) {
+          var maxHeight = window.innerHeight - 100;
+          frame.style.height = Math.min(e.data.height + 20, maxHeight) + 'px';
+        }
+      }
+      if (e.data.type === 'survey:completed') {
         window.dataLayer = window.dataLayer || [];
         window.dataLayer.push({ event: 'surveyCompleted', surveyId: CONFIG.surveyId });
         setTimeout(function() {
@@ -2540,11 +2621,27 @@ window.addEventListener('message', function(e) {
                             </button>
                           </div>
 
+                          {/* Recommendation Box */}
+                          <div className="p-4 bg-gradient-to-r from-[#FF4F01]/5 to-[#FF4F01]/10 rounded-lg border border-[#FF4F01]/20">
+                            <div className="flex items-start gap-3">
+                              <div className="w-8 h-8 rounded-full bg-[#FF4F01]/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <Tag className="w-4 h-4 text-[#FF4F01]" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-[#1a1a2e] mb-1">Which method should I use?</p>
+                                <p className="text-xs text-[#6b6b7b] leading-relaxed">
+                                  <strong className="text-[#1a1a2e]">Google Tag Manager</strong> is recommended if you already have GTM on your site — it gives you more control over triggers, tracking, and doesn't require code changes.
+                                  Otherwise, use <strong className="text-[#1a1a2e]">JavaScript</strong> for a quick copy-paste install.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
                           {/* Install Method Tabs */}
                           <div className="flex gap-2 p-1 bg-[#fbf5ea] rounded-lg">
                             {[
-                              { id: "javascript", label: "JavaScript", desc: "Copy & paste code" },
-                              { id: "gtm", label: "Google Tag Manager", desc: "Container tag" },
+                              { id: "gtm", label: "Google Tag Manager", desc: "Best if you have GTM" },
+                              { id: "javascript", label: "JavaScript", desc: "Quick copy & paste" },
                               { id: "wordpress", label: "WordPress", desc: "Plugin or code" },
                             ].map(({ id, label, desc }) => (
                               <button
@@ -2568,9 +2665,9 @@ window.addEventListener('message', function(e) {
                               <p className="text-sm text-[#6b6b7b]">
                                 Copy this code and paste it into your website's HTML where you want the survey to appear.
                               </p>
-                              <div className="relative">
-                                <pre className="bg-[#1a1a2e] text-white p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap max-h-80">
-                                  <code>{embedCode}</code>
+                              <div className="relative overflow-hidden">
+                                <pre className="bg-[#1a1a2e] text-white p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap break-all max-h-80 max-w-full">
+                                  <code className="break-all">{embedCode}</code>
                                 </pre>
                                 <motion.div
                                   className="absolute top-2 right-2"
@@ -2677,9 +2774,9 @@ window.addEventListener('message', function(e) {
                                   </div>
                                 )}
                               </div>
-                              <div className="relative">
-                                <pre className="bg-[#1a1a2e] text-white p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap max-h-80">
-                                  <code>{getGtmCode()}</code>
+                              <div className="relative overflow-hidden">
+                                <pre className="bg-[#1a1a2e] text-white p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap break-all max-h-80 max-w-full">
+                                  <code className="break-all">{getGtmCode()}</code>
                                 </pre>
                                 <motion.div
                                   className="absolute top-2 right-2"
@@ -2713,9 +2810,9 @@ window.addEventListener('message', function(e) {
                               <p className="text-sm text-[#6b6b7b]">
                                 Add this code to your WordPress site using a Custom HTML block, widget, or your theme's code editor.
                               </p>
-                              <div className="relative">
-                                <pre className="bg-[#1a1a2e] text-white p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap max-h-80">
-                                  <code>{embedCode}</code>
+                              <div className="relative overflow-hidden">
+                                <pre className="bg-[#1a1a2e] text-white p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap break-all max-h-80 max-w-full">
+                                  <code className="break-all">{embedCode}</code>
                                 </pre>
                                 <motion.div
                                   className="absolute top-2 right-2"

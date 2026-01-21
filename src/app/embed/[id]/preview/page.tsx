@@ -108,6 +108,15 @@ export default function EmbedPreviewPage() {
         </div>
       )}
 
+      {/* Custom Animation Styles */}
+      <style jsx global>{`
+        @keyframes popupOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes popupModalIn { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        .animate-popup-overlay { animation: popupOverlayIn 0.3s ease-out; }
+        .animate-popup-modal { animation: popupModalIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .transition-spring { transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+      `}</style>
+
       {/* POPUP MODAL */}
       {embedType === "popup" && (
         <>
@@ -121,11 +130,11 @@ export default function EmbedPreviewPage() {
             </button>
           )}
           {isOpen && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9998] p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden relative">
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9998] p-4 animate-popup-overlay">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden relative animate-popup-modal">
                 <button
                   onClick={() => setIsOpen(false)}
-                  className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center z-10"
+                  className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center z-10 transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -155,8 +164,8 @@ export default function EmbedPreviewPage() {
             </button>
           )}
           <div
-            className={`fixed top-0 ${position === "left" ? "left-0" : "right-0"} h-full w-full max-w-md bg-white shadow-2xl z-[9998] transition-transform duration-300 ${
-              isOpen ? "translate-x-0" : position === "left" ? "-translate-x-full" : "translate-x-full"
+            className={`fixed top-0 ${position === "left" ? "left-0" : "right-0"} h-full w-full max-w-md bg-white shadow-2xl z-[9998] transition-spring ${
+              isOpen ? "translate-x-0 opacity-100" : position === "left" ? "-translate-x-full opacity-0" : "translate-x-full opacity-0"
             }`}
           >
             <button
@@ -199,8 +208,8 @@ export default function EmbedPreviewPage() {
             {tabText}
           </button>
           <div
-            className={`fixed top-0 ${position === "left" ? "left-0" : "right-0"} h-full w-full max-w-md bg-white shadow-2xl z-[9997] transition-transform duration-300 ${
-              isOpen ? "translate-x-0" : position === "left" ? "-translate-x-full" : "translate-x-full"
+            className={`fixed top-0 ${position === "left" ? "left-0" : "right-0"} h-full w-full max-w-md bg-white shadow-2xl z-[9997] transition-spring ${
+              isOpen ? "translate-x-0 opacity-100" : position === "left" ? "-translate-x-full opacity-0" : "translate-x-full opacity-0"
             }`}
             style={{ [position === "left" ? "left" : "right"]: isOpen ? "0" : undefined }}
           >
@@ -234,7 +243,7 @@ export default function EmbedPreviewPage() {
             </button>
           )}
           {isOpen && (
-            <div className="fixed bottom-6 right-6 w-96 h-[500px] bg-white rounded-2xl shadow-2xl z-[9998] overflow-hidden">
+            <div className="fixed bottom-6 right-6 w-96 h-[500px] bg-white rounded-2xl shadow-2xl z-[9998] overflow-hidden animate-popup-modal">
               <div
                 className="flex items-center justify-between px-4 py-3 text-white"
                 style={{ backgroundColor: accentColor }}
@@ -242,7 +251,7 @@ export default function EmbedPreviewPage() {
                 <span className="font-medium">Feedback</span>
                 <button
                   onClick={() => setIsOpen(false)}
-                  className="w-6 h-6 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center"
+                  className="w-6 h-6 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -261,11 +270,11 @@ export default function EmbedPreviewPage() {
 
       {/* EXIT INTENT */}
       {embedType === "exit-intent" && showExitIntent && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9998] p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden relative">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9998] p-4 animate-popup-overlay">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden relative animate-popup-modal">
             <button
               onClick={() => setShowExitIntent(false)}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center z-10"
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center z-10 transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
