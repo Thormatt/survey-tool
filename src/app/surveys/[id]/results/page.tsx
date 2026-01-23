@@ -23,7 +23,15 @@ import {
   Radio,
   Wifi,
   WifiOff,
+  Video,
+  MousePointer,
 } from "lucide-react";
+import { SessionList } from "@/components/behavior/session-list";
+import { SessionPlayer } from "@/components/behavior/session-player";
+import { HeatmapCanvas } from "@/components/behavior/heatmap-canvas";
+import { HeatmapControls } from "@/components/behavior/heatmap-controls";
+import { ScrollDepthChart } from "@/components/behavior/scroll-depth-chart";
+import type { SessionRecordingMeta, BehaviorSettings, HeatmapRecord, ViewportBreakpoint, ScrollDepthData } from "@/types/behavior";
 import { useRealtimeResults } from "@/hooks/useRealtimeResults";
 import Link from "next/link";
 import {
@@ -210,6 +218,16 @@ export default function SurveyResultsPage() {
   const [emailSent, setEmailSent] = useState(false);
   const [newResponsesCount, setNewResponsesCount] = useState(0);
   const [showNewResponsesNotification, setShowNewResponsesNotification] = useState(false);
+
+  // Behavior analytics state
+  const [activeTab, setActiveTab] = useState<"responses" | "behavior">("responses");
+  const [behaviorSettings, setBehaviorSettings] = useState<BehaviorSettings | null>(null);
+  const [selectedRecording, setSelectedRecording] = useState<SessionRecordingMeta | null>(null);
+  const [heatmapData, setHeatmapData] = useState<HeatmapRecord[]>([]);
+  const [heatmapType, setHeatmapType] = useState<"CLICK" | "SCROLL" | "MOVE">("CLICK");
+  const [heatmapViewport, setHeatmapViewport] = useState<ViewportBreakpoint>("desktop");
+  const [scrollDepthData, setScrollDepthData] = useState<ScrollDepthData[]>([]);
+  const [behaviorLoading, setBehaviorLoading] = useState(false);
   const resultsRef = useRef<HTMLDivElement>(null);
 
   // Real-time updates handler
@@ -244,6 +262,17 @@ export default function SurveyResultsPage() {
           questions: data.questions || [],
           _count: data._count || { responses: 0 },
         });
+
+        // Fetch behavior settings
+        try {
+          const behaviorResponse = await fetch(`/api/surveys/${params.id}/behavior`);
+          if (behaviorResponse.ok) {
+            const behaviorData = await behaviorResponse.json();
+            setBehaviorSettings(behaviorData);
+          }
+        } catch (behaviorErr) {
+          console.warn("Failed to load behavior settings:", behaviorErr);
+        }
       } catch {
         setError("Failed to load results");
       } finally {
@@ -253,6 +282,43 @@ export default function SurveyResultsPage() {
 
     fetchResults();
   }, [params.id]);
+
+  // Fetch heatmap data when behavior tab is active
+  useEffect(() => {
+    if (activeTab !== "behavior" || !behaviorSettings?.heatmapsEnabled) return;
+
+    async function fetchHeatmapData() {
+      setBehaviorLoading(true);
+      try {
+        const params = new URLSearchParams({
+          type: heatmapType,
+          viewport: heatmapViewport,
+        });
+        const response = await fetch(`/api/surveys/${survey?.id}/behavior/heatmaps?${params.toString()}`);
+        if (response.ok) {
+          const data = await response.json();
+          setHeatmapData(data.heatmaps || []);
+        }
+      } catch (err) {
+        console.warn("Failed to load heatmap data:", err);
+      } finally {
+        setBehaviorLoading(false);
+      }
+    }
+
+    fetchHeatmapData();
+  }, [activeTab, behaviorSettings?.heatmapsEnabled, heatmapType, heatmapViewport, survey?.id]);
+
+  // Handle recording selection
+  const handleSelectRecording = useCallback((recording: SessionRecordingMeta) => {
+    setSelectedRecording(recording);
+  }, []);
+
+  // Create question titles for scroll depth chart
+  const questionTitles = survey?.questions.reduce((acc, q) => {
+    acc[q.id] = q.title;
+    return acc;
+  }, {} as Record<string, string>) || {};
 
   const exportToCSV = () => {
     if (!survey) return;
@@ -595,6 +661,42 @@ export default function SurveyResultsPage() {
         </div>
       </header>
 
+      {/* Tab Navigation */}
+      {behaviorSettings && (behaviorSettings.recordingEnabled || behaviorSettings.heatmapsEnabled) && (
+        <div className="bg-white border-b border-[#dcd6f6]">
+          <div className="container mx-auto px-6">
+            <nav className="flex gap-4">
+              <button
+                onClick={() => setActiveTab("responses")}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === "responses"
+                    ? "border-[#FF4F01] text-[#1a1a2e]"
+                    : "border-transparent text-[#6b6b7b] hover:text-[#1a1a2e]"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4" />
+                  Responses
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveTab("behavior")}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === "behavior"
+                    ? "border-[#FF4F01] text-[#1a1a2e]"
+                    : "border-transparent text-[#6b6b7b] hover:text-[#1a1a2e]"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Video className="w-4 h-4" />
+                  Behavior Analytics
+                </div>
+              </button>
+            </nav>
+          </div>
+        </div>
+      )}
+
       <motion.div
         ref={resultsRef}
         className="container mx-auto px-6 py-8 max-w-5xl"
@@ -602,6 +704,8 @@ export default function SurveyResultsPage() {
         initial="initial"
         animate="animate"
       >
+        {activeTab === "responses" ? (
+          <>
         {/* Hero Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <motion.div
@@ -815,6 +919,141 @@ export default function SurveyResultsPage() {
         >
           <p>Survey created on {new Date(survey.createdAt).toLocaleDateString()}</p>
         </motion.div>
+          </>
+        ) : (
+          <>
+            {/* Behavior Analytics Tab */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Session Recordings Section */}
+              <div className="lg:col-span-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="font-['Syne'] flex items-center gap-2">
+                      <Video className="w-5 h-5" />
+                      Session Recordings
+                    </CardTitle>
+                    <CardDescription>
+                      Watch how respondents interacted with your survey
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {selectedRecording ? (
+                      <div className="space-y-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedRecording(null)}
+                        >
+                          <ArrowLeft className="w-4 h-4 mr-2" />
+                          Back to recordings
+                        </Button>
+                        <div className="h-[600px]">
+                          <SessionPlayer
+                            recording={selectedRecording}
+                            eventsUrl={`/api/surveys/${survey.id}/behavior/recordings/${selectedRecording.sessionToken}/events`}
+                            onClose={() => setSelectedRecording(null)}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <SessionList
+                        surveyId={survey.id}
+                        onSelectRecording={handleSelectRecording}
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Heatmaps Section */}
+              {behaviorSettings?.heatmapsEnabled && (
+                <div className="lg:col-span-2">
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="font-['Syne'] flex items-center gap-2">
+                            <MousePointer className="w-5 h-5" />
+                            Heatmaps
+                          </CardTitle>
+                          <CardDescription>
+                            Visualize click patterns and scroll behavior
+                          </CardDescription>
+                        </div>
+                        <HeatmapControls
+                          selectedType={heatmapType}
+                          selectedViewport={heatmapViewport}
+                          onTypeChange={(type) => setHeatmapType(type as "CLICK" | "SCROLL" | "MOVE")}
+                          onViewportChange={setHeatmapViewport}
+                        />
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {behaviorLoading ? (
+                        <div className="flex items-center justify-center py-12">
+                          <Loader2 className="w-6 h-6 animate-spin text-[#FF4F01]" />
+                        </div>
+                      ) : heatmapData.length > 0 && heatmapData[0]?.data ? (
+                        <div className="bg-gray-100 rounded-lg p-4">
+                          <HeatmapCanvas
+                            data={heatmapData[0].data}
+                            type={heatmapType}
+                            width={heatmapData[0].data.width || 800}
+                            height={heatmapData[0].data.height || 600}
+                          />
+                        </div>
+                      ) : (
+                        <div className="text-center py-12 text-[#6b6b7b]">
+                          <MousePointer className="w-12 h-12 mx-auto mb-4 opacity-30" />
+                          <p>No heatmap data available yet</p>
+                          <p className="text-sm mt-1">
+                            Heatmaps are generated as respondents interact with your survey
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Scroll Depth Section */}
+              {behaviorSettings?.heatmapsEnabled && scrollDepthData.length > 0 && (
+                <div className="lg:col-span-2">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="font-['Syne'] flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5" />
+                        Scroll Depth Analysis
+                      </CardTitle>
+                      <CardDescription>
+                        See how far respondents scroll through your survey
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ScrollDepthChart
+                        data={scrollDepthData}
+                        questionTitles={questionTitles}
+                      />
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </div>
+
+            {/* Behavior Footer */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              className="mt-12 text-center text-sm text-[#6b6b7b]"
+            >
+              <p>
+                Behavior analytics enabled •{" "}
+                {behaviorSettings?.retentionDays || 30} day retention
+              </p>
+            </motion.div>
+          </>
+        )}
       </motion.div>
 
       {/* Click outside to close share menu */}

@@ -47,6 +47,8 @@ import {
   ShieldCheck,
   Heart,
   Smile,
+  Video,
+  MousePointer,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -2133,6 +2135,16 @@ export default function EditSurveyPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [isPublished, setIsPublished] = useState(false);
 
+  // Behavior tracking settings
+  const [recordingEnabled, setRecordingEnabled] = useState(false);
+  const [heatmapsEnabled, setHeatmapsEnabled] = useState(false);
+  const [behaviorConsentRequired, setBehaviorConsentRequired] = useState(true);
+  const [behaviorConsentText, setBehaviorConsentText] = useState("This survey uses session recording to improve your experience. Your interactions may be recorded and analyzed.");
+  const [samplingRate, setSamplingRate] = useState(100);
+  const [retentionDays, setRetentionDays] = useState(30);
+  const [maskInputs, setMaskInputs] = useState(false);
+  const [behaviorSettingsLoaded, setBehaviorSettingsLoaded] = useState(false);
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -2177,6 +2189,24 @@ export default function EditSurveyPage() {
             settings: q.settings,
           }))
         );
+
+        // Fetch behavior settings
+        try {
+          const behaviorResponse = await fetch(`/api/surveys/${params.id}/behavior`);
+          if (behaviorResponse.ok) {
+            const behaviorData = await behaviorResponse.json();
+            setRecordingEnabled(behaviorData.recordingEnabled ?? false);
+            setHeatmapsEnabled(behaviorData.heatmapsEnabled ?? false);
+            setBehaviorConsentRequired(behaviorData.consentRequired ?? true);
+            setBehaviorConsentText(behaviorData.consentText || "This survey uses session recording to improve your experience. Your interactions may be recorded and analyzed.");
+            setSamplingRate(behaviorData.samplingRate ?? 100);
+            setRetentionDays(behaviorData.retentionDays ?? 30);
+            setMaskInputs(behaviorData.maskInputs ?? false);
+            setBehaviorSettingsLoaded(true);
+          }
+        } catch (behaviorErr) {
+          console.warn("Failed to load behavior settings:", behaviorErr);
+        }
       } catch {
         setError("Failed to load survey");
       } finally {
@@ -2237,6 +2267,27 @@ export default function EditSurveyPage() {
 
       if (!response.ok) {
         throw new Error("Failed to save survey");
+      }
+
+      // Save behavior settings if recording or heatmaps are enabled
+      if (recordingEnabled || heatmapsEnabled) {
+        try {
+          await fetch(`/api/surveys/${params.id}/behavior`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              recordingEnabled,
+              heatmapsEnabled,
+              consentRequired: behaviorConsentRequired,
+              consentText: behaviorConsentText,
+              samplingRate,
+              retentionDays,
+              maskInputs,
+            }),
+          });
+        } catch (behaviorErr) {
+          console.warn("Failed to save behavior settings:", behaviorErr);
+        }
       }
 
       router.push(`/surveys/${params.id}`);
@@ -2532,6 +2583,164 @@ export default function EditSurveyPage() {
                       <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full peer-checked:translate-x-5 transition-transform"></div>
                     </div>
                   </label>
+                </div>
+
+                {/* Behavior Analytics Section */}
+                <div className="pt-4 border-t border-[#dcd6f6]">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-8 h-8 rounded-full bg-[#dcd6f6] flex items-center justify-center">
+                      <Video className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-medium text-sm">Behavior Analytics</div>
+                      <div className="text-xs text-[#6b6b7b]">
+                        Record sessions and track interactions
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Session Recording Toggle */}
+                  <div className="space-y-4 ml-11">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div>
+                        <div className="font-medium text-sm">Session Recording</div>
+                        <div className="text-xs text-[#6b6b7b]">
+                          Record respondent sessions for replay
+                        </div>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          checked={recordingEnabled}
+                          onChange={(e) => setRecordingEnabled(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-[#dcd6f6] rounded-full peer peer-checked:bg-[#1a1a2e] transition-colors"></div>
+                        <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full peer-checked:translate-x-5 transition-transform"></div>
+                      </div>
+                    </label>
+
+                    {/* Heatmaps Toggle */}
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div>
+                        <div className="font-medium text-sm flex items-center gap-2">
+                          <MousePointer className="w-3 h-3" />
+                          Heatmaps
+                        </div>
+                        <div className="text-xs text-[#6b6b7b]">
+                          Visualize click and scroll patterns
+                        </div>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          checked={heatmapsEnabled}
+                          onChange={(e) => setHeatmapsEnabled(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-[#dcd6f6] rounded-full peer peer-checked:bg-[#1a1a2e] transition-colors"></div>
+                        <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full peer-checked:translate-x-5 transition-transform"></div>
+                      </div>
+                    </label>
+
+                    {/* Show additional settings when enabled */}
+                    {(recordingEnabled || heatmapsEnabled) && (
+                      <div className="space-y-4 pt-4 border-t border-[#dcd6f6]/50">
+                        {/* Consent Toggle */}
+                        <label className="flex items-center justify-between cursor-pointer">
+                          <div>
+                            <div className="font-medium text-sm">Require Consent</div>
+                            <div className="text-xs text-[#6b6b7b]">
+                              Ask respondents for permission before recording
+                            </div>
+                          </div>
+                          <div className="relative">
+                            <input
+                              type="checkbox"
+                              checked={behaviorConsentRequired}
+                              onChange={(e) => setBehaviorConsentRequired(e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-[#dcd6f6] rounded-full peer peer-checked:bg-[#1a1a2e] transition-colors"></div>
+                            <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full peer-checked:translate-x-5 transition-transform"></div>
+                          </div>
+                        </label>
+
+                        {/* Consent Text */}
+                        {behaviorConsentRequired && (
+                          <div>
+                            <label className="text-sm font-medium mb-2 block">Consent Message</label>
+                            <Textarea
+                              value={behaviorConsentText}
+                              onChange={(e) => setBehaviorConsentText(e.target.value)}
+                              placeholder="Enter consent message..."
+                              className="text-sm"
+                              rows={2}
+                            />
+                          </div>
+                        )}
+
+                        {/* Mask Inputs Toggle */}
+                        <label className="flex items-center justify-between cursor-pointer">
+                          <div>
+                            <div className="font-medium text-sm">Mask Form Inputs</div>
+                            <div className="text-xs text-[#6b6b7b]">
+                              Hide all typed text in recordings for privacy
+                            </div>
+                          </div>
+                          <div className="relative">
+                            <input
+                              type="checkbox"
+                              checked={maskInputs}
+                              onChange={(e) => setMaskInputs(e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-[#dcd6f6] rounded-full peer peer-checked:bg-[#1a1a2e] transition-colors"></div>
+                            <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full peer-checked:translate-x-5 transition-transform"></div>
+                          </div>
+                        </label>
+
+                        {/* Sampling Rate */}
+                        <div>
+                          <label className="text-sm font-medium mb-2 block">
+                            Sampling Rate: {samplingRate}%
+                          </label>
+                          <input
+                            type="range"
+                            min="1"
+                            max="100"
+                            value={samplingRate}
+                            onChange={(e) => setSamplingRate(parseInt(e.target.value))}
+                            className="w-full h-2 bg-[#dcd6f6] rounded-lg appearance-none cursor-pointer"
+                          />
+                          <div className="flex justify-between text-xs text-[#6b6b7b] mt-1">
+                            <span>1%</span>
+                            <span>Record {samplingRate}% of sessions</span>
+                            <span>100%</span>
+                          </div>
+                        </div>
+
+                        {/* Retention Period */}
+                        <div>
+                          <label className="text-sm font-medium mb-2 block">Data Retention</label>
+                          <select
+                            value={retentionDays}
+                            onChange={(e) => setRetentionDays(parseInt(e.target.value))}
+                            className="w-full p-2 text-sm border border-[#dcd6f6] rounded-lg"
+                          >
+                            <option value={7}>7 days</option>
+                            <option value={14}>14 days</option>
+                            <option value={30}>30 days</option>
+                            <option value={60}>60 days</option>
+                            <option value={90}>90 days</option>
+                          </select>
+                          <p className="text-xs text-[#6b6b7b] mt-1">
+                            Recordings will be automatically deleted after this period
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

@@ -43,6 +43,10 @@ model Survey {
   collaboratorInvites  CollaboratorInvitation[]
   webhooks             Webhook[]
   alerts               Alert[]
+  // Behavioral analytics relations
+  behaviorSettings     BehaviorSettings?
+  sessionRecordings    SessionRecording[]
+  heatmapData          HeatmapData[]
 
   @@index([published])
   @@index([userId])
@@ -116,19 +120,21 @@ enum QuestionType {
 
 // Question - individual questions in a survey
 model Question {
-  id          String       @id @default(cuid())
+  id          String        @id @default(cuid())
   surveyId    String
-  survey      Survey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  survey      Survey        @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   type        QuestionType
   title       String
   description String?
-  required    Boolean      @default(false)
+  required    Boolean       @default(false)
   order       Int
-  options     Json?        // For choice questions: ["Option 1", "Option 2", ...]
-  settings    Json?        // Type-specific settings (min/max for scale, etc.)
+  options     Json?         // For choice questions: ["Option 1", "Option 2", ...]
+  settings    Json?         // Type-specific settings (min/max for scale, etc.)
   answers     Answer[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  // Behavioral analytics relation
+  heatmapData HeatmapData[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
   @@index([surveyId])
   @@index([order])
@@ -136,15 +142,17 @@ model Question {
 
 // Response - a single survey submission
 model Response {
-  id              String   @id @default(cuid())
-  surveyId        String
-  survey          Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  answers         Answer[]
-  respondentEmail String?  // Only stored if survey is not anonymous
-  respondentName  String?  // Only stored if survey is not anonymous
-  invitationToken String?  // If came from invitation
-  completedAt     DateTime @default(now())
-  metadata        Json?    // Optional: user agent, referrer, etc.
+  id               String            @id @default(cuid())
+  surveyId         String
+  survey           Survey            @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  answers          Answer[]
+  respondentEmail  String?           // Only stored if survey is not anonymous
+  respondentName   String?           // Only stored if survey is not anonymous
+  invitationToken  String?           // If came from invitation
+  completedAt      DateTime          @default(now())
+  metadata         Json?             // Optional: user agent, referrer, etc.
+  // Behavioral analytics relation
+  sessionRecording SessionRecording?
 
   @@index([surveyId])
   @@index([completedAt])
@@ -319,4 +327,287 @@ model AlertTrigger {
   value      Json            // Value to compare against
 
   @@index([alertId])
+}
+
+// ============================================
+// BEHAVIORAL ANALYTICS (Session Recording & Heatmaps)
+// ============================================
+
+// Recording status enum
+enum RecordingStatus {
+  RECORDING   // Session is actively recording
+  PROCESSING  // Events are being processed/compressed
+  READY       // Recording is ready for playback
+  FAILED      // Processing failed
+  EXPIRED     // Past retention period, pending cleanup
+}
+
+// Heatmap types
+enum HeatmapType {
+  CLICK       // Click position heatmap
+  SCROLL      // Scroll depth visualization
+  MOVE        // Mouse movement heatmap
+  ATTENTION   // Time-based attention map
+}
+
+// Survey-level behavior tracking settings
+model BehaviorSettings {
+  id               String   @id @default(cuid())
+  surveyId         String   @unique
+  survey           Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  recordingEnabled Boolean  @default(false)
+  heatmapsEnabled  Boolean  @default(false)
+  consentRequired  Boolean  @default(true)
+  consentText      String?  // Custom consent message
+  samplingRate     Int      @default(100) // 1-100% of sessions to record
+  retentionDays    Int      @default(30)  // Days to keep recordings
+  maskInputs       Boolean  @default(true) // Auto-mask sensitive inputs
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// Session recording metadata
+model SessionRecording {
+  id            String          @id @default(cuid())
+  surveyId      String
+  survey        Survey          @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  responseId    String?         @unique
+  response      Response?       @relation(fields: [responseId], references: [id], onDelete: SetNull)
+  sessionToken  String          @unique @default(cuid()) // Public identifier for event upload
+  duration      Int?            // Total duration in milliseconds
+  eventCount    Int             @default(0)
+  eventsUrl     String?         // Vercel Blob URL for event file
+  deviceType    String?         // desktop, tablet, mobile
+  browser       String?         // Browser name
+  viewportWidth Int?
+  viewportHeight Int?
+  userAgent     String?
+  status        RecordingStatus @default(RECORDING)
+  consentGiven  Boolean         @default(false)
+  startedAt     DateTime        @default(now())
+  endedAt       DateTime?
+  expiresAt     DateTime?       // When this recording should be deleted
+  createdAt     DateTime        @default(now())
+
+  @@index([surveyId])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([startedAt])
+}
+
+// Aggregated heatmap data (pre-computed for fast retrieval)
+model HeatmapData {
+  id                 String      @id @default(cuid())
+  surveyId           String
+  survey             Survey      @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  questionId         String?
+  question           Question?   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  type               HeatmapType
+  data               Json        // {points: [{x,y,count}], width, height, maxCount}
+  viewportBreakpoint String      // "desktop", "tablet", "mobile"
+  sessionCount       Int         // Number of sessions aggregated
+  periodStart        DateTime    // Start of aggregation period
+  periodEnd          DateTime    // End of aggregation period
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@unique([surveyId, questionId, type, viewportBreakpoint])
+  @@index([surveyId])
+  @@index([questionId])
+}
+
+// ============================================
+// SITE-WIDE ANALYTICS (Hotjar/Clarity-style)
+// ============================================
+
+// URL pattern matching types for page targeting
+enum UrlMatchType {
+  EXACT       // Exact URL match
+  STARTS_WITH // URL starts with pattern
+  CONTAINS    // URL contains pattern
+  GLOB        // Glob pattern (e.g., /blog/*)
+  REGEX       // Regular expression
+}
+
+// Survey trigger types for popup conditions
+enum SurveyTriggerType {
+  PAGE_LOAD     // Trigger on page load
+  EXIT_INTENT   // Trigger on exit intent (mouse leaves viewport)
+  SCROLL_DEPTH  // Trigger at specific scroll percentage
+  TIME_ON_PAGE  // Trigger after time spent on page
+  ELEMENT_CLICK // Trigger when specific element clicked
+  ELEMENT_VISIBLE // Trigger when element becomes visible
+}
+
+// Survey display modes for triggered surveys
+enum SurveyDisplayMode {
+  POPUP       // Modal popup (center of screen)
+  SLIDE_IN    // Slide in from corner
+  EMBEDDED    // Embedded in page (at element)
+  BANNER      // Top or bottom banner
+  FULL_PAGE   // Full page takeover
+}
+
+// Site - represents a website being tracked
+model Site {
+  id                String   @id @default(cuid())
+  userId            String   // Clerk user ID - site owner
+  name              String   // Display name (e.g., "My Blog")
+  domain            String   // Primary domain (e.g., "example.com")
+  trackingId        String   @unique @default(cuid()) // Public ID for tracking script
+  // Global settings
+  recordingEnabled  Boolean  @default(true)
+  heatmapsEnabled   Boolean  @default(true)
+  consentRequired   Boolean  @default(true)
+  consentText       String?  // Custom consent message
+  samplingRate      Int      @default(100) // 1-100% of sessions to record
+  retentionDays     Int      @default(30)  // Days to keep recordings
+  maskInputs        Boolean  @default(true) // Auto-mask sensitive inputs
+  maskSelectors     String[] @default([])  // CSS selectors to always mask
+  // Status
+  enabled           Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  // Relations
+  pageTargets       PageTarget[]
+  recordings        SiteRecording[]
+  heatmapData       SiteHeatmapData[]
+  surveyTriggers    SiteSurveyTrigger[]
+
+  @@unique([userId, domain])
+  @@index([userId])
+  @@index([trackingId])
+  @@index([domain])
+}
+
+// PageTarget - URL rules for what pages to track
+model PageTarget {
+  id                String       @id @default(cuid())
+  siteId            String
+  site              Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  name              String       // Display name (e.g., "Blog Posts")
+  urlPattern        String       // Pattern to match (e.g., "/blog/*")
+  matchType         UrlMatchType @default(GLOB)
+  // Override site-level settings for this page
+  recordingEnabled  Boolean?     // null = inherit from site
+  heatmapsEnabled   Boolean?     // null = inherit from site
+  // Targeting options
+  priority          Int          @default(0) // Higher priority rules match first
+  enabled           Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  // Relations
+  surveyTriggers    SiteSurveyTrigger[]
+
+  @@index([siteId])
+  @@index([priority])
+}
+
+// SiteSurveyTrigger - link surveys to page triggers
+model SiteSurveyTrigger {
+  id              String             @id @default(cuid())
+  siteId          String
+  site            Site               @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  pageTargetId    String?            // Optional - if null, applies to all pages
+  pageTarget      PageTarget?        @relation(fields: [pageTargetId], references: [id], onDelete: SetNull)
+  surveyId        String             // Reference to Survey model
+  // Trigger configuration
+  triggerType     SurveyTriggerType  @default(PAGE_LOAD)
+  triggerValue    String?            // e.g., "50" for 50% scroll, "30" for 30 seconds
+  triggerSelector String?            // CSS selector for ELEMENT_CLICK/ELEMENT_VISIBLE
+  // Display configuration
+  displayMode     SurveyDisplayMode  @default(POPUP)
+  displayPosition String?            // e.g., "bottom-right" for SLIDE_IN
+  displayDelay    Int                @default(0) // Additional delay in ms after trigger
+  // Frequency control
+  showOnce        Boolean            @default(true) // Only show once per visitor
+  cooldownDays    Int                @default(7)    // Days before showing again
+  percentageShow  Int                @default(100)  // % of eligible visitors to show
+  // Status
+  enabled         Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([siteId])
+  @@index([pageTargetId])
+  @@index([surveyId])
+}
+
+// SiteRecording - site-wide session recordings
+model SiteRecording {
+  id              String          @id @default(cuid())
+  siteId          String
+  site            Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  sessionToken    String          @unique @default(cuid()) // Public identifier for event upload
+  visitorId       String          // Persistent visitor identifier
+  // Page info (first page of session, can span multiple pages)
+  pageUrl         String          // Full URL of first page
+  pagePath        String          // Path only (e.g., "/blog/post-1")
+  pageTitle       String?         // Document title
+  referrer        String?         // Referrer URL
+  // Device info
+  deviceType      String?         // desktop, tablet, mobile
+  browser         String?         // Browser name
+  os              String?         // Operating system
+  viewportWidth   Int?
+  viewportHeight  Int?
+  screenWidth     Int?
+  screenHeight    Int?
+  userAgent       String?
+  // Location (approximate, from IP)
+  country         String?
+  region          String?
+  city            String?
+  // Session metrics
+  duration        Int?            // Total duration in milliseconds
+  pageCount       Int             @default(1) // Number of pages visited
+  eventCount      Int             @default(0)
+  eventsUrl       String?         // Vercel Blob URL for event file
+  // Behavior metrics (computed from events)
+  clickCount      Int             @default(0)
+  scrollDepth     Int?            // Max scroll depth as percentage
+  rageClicks      Int             @default(0) // Rapid clicks in same area
+  deadClicks      Int             @default(0) // Clicks with no response
+  uTurns          Int             @default(0) // Quick back navigation
+  // Status
+  status          RecordingStatus @default(RECORDING)
+  consentGiven    Boolean         @default(false)
+  // Survey interaction
+  surveyShown     Boolean         @default(false) // Was a survey triggered?
+  surveyCompleted Boolean         @default(false) // Did they complete it?
+  surveyId        String?         // Which survey was shown
+  // Timestamps
+  startedAt       DateTime        @default(now())
+  endedAt         DateTime?
+  expiresAt       DateTime?       // When this recording should be deleted
+  createdAt       DateTime        @default(now())
+
+  @@index([siteId])
+  @@index([visitorId])
+  @@index([pagePath])
+  @@index([status])
+  @@index([startedAt])
+  @@index([expiresAt])
+  @@index([surveyId])
+}
+
+// SiteHeatmapData - aggregated heatmap data per page
+model SiteHeatmapData {
+  id                 String      @id @default(cuid())
+  siteId             String
+  site               Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  pagePath           String      // URL path (e.g., "/about")
+  pageUrl            String?     // Full URL (for reference)
+  type               HeatmapType
+  data               Json        // {points: [{x,y,count}], width, height, maxCount}
+  viewportBreakpoint String      // "desktop", "tablet", "mobile"
+  sessionCount       Int         // Number of sessions aggregated
+  periodStart        DateTime    // Start of aggregation period
+  periodEnd          DateTime    // End of aggregation period
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@unique([siteId, pagePath, type, viewportBreakpoint])
+  @@index([siteId])
+  @@index([pagePath])
 }

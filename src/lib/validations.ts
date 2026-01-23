@@ -113,6 +113,89 @@ export const groupUpdateSchema = z.object({
   removeMembers: z.array(emailSchema).optional(),
 });
 
+// ============================================
+// SITE-WIDE ANALYTICS SCHEMAS
+// ============================================
+
+// Site creation schema
+export const siteSchema = z.object({
+  name: z
+    .string()
+    .min(1, "Site name is required")
+    .max(100, "Site name must be less than 100 characters")
+    .trim(),
+  domain: z
+    .string()
+    .min(1, "Domain is required")
+    .max(255, "Domain must be less than 255 characters")
+    .transform((val) => val.toLowerCase().trim().replace(/^https?:\/\//, "").replace(/\/$/, "")),
+  recordingEnabled: z.boolean().optional().default(true),
+  heatmapsEnabled: z.boolean().optional().default(true),
+  consentRequired: z.boolean().optional().default(true),
+  consentText: z.string().max(1000).optional().nullable(),
+  samplingRate: z.number().int().min(1).max(100).optional().default(100),
+  retentionDays: z.number().int().min(1).max(365).optional().default(30),
+  maskInputs: z.boolean().optional().default(true),
+  maskSelectors: z.array(z.string()).optional().default([]),
+});
+
+// Site update schema
+export const siteUpdateSchema = z.object({
+  name: z.string().min(1).max(100).trim().optional(),
+  domain: z
+    .string()
+    .min(1)
+    .max(255)
+    .transform((val) => val.toLowerCase().trim().replace(/^https?:\/\//, "").replace(/\/$/, ""))
+    .optional(),
+  recordingEnabled: z.boolean().optional(),
+  heatmapsEnabled: z.boolean().optional(),
+  consentRequired: z.boolean().optional(),
+  consentText: z.string().max(1000).optional().nullable(),
+  samplingRate: z.number().int().min(1).max(100).optional(),
+  retentionDays: z.number().int().min(1).max(365).optional(),
+  maskInputs: z.boolean().optional(),
+  maskSelectors: z.array(z.string()).optional(),
+  enabled: z.boolean().optional(),
+});
+
+// Page target schema
+export const pageTargetSchema = z.object({
+  name: z
+    .string()
+    .min(1, "Name is required")
+    .max(100, "Name must be less than 100 characters")
+    .trim(),
+  urlPattern: z
+    .string()
+    .min(1, "URL pattern is required")
+    .max(500, "URL pattern must be less than 500 characters"),
+  matchType: z.enum(["EXACT", "STARTS_WITH", "CONTAINS", "GLOB", "REGEX"]).optional().default("GLOB"),
+  recordingEnabled: z.boolean().optional().nullable(),
+  heatmapsEnabled: z.boolean().optional().nullable(),
+  priority: z.number().int().min(0).max(100).optional().default(0),
+  enabled: z.boolean().optional().default(true),
+});
+
+// Survey trigger schema
+export const surveyTriggerSchema = z.object({
+  pageTargetId: z.string().optional().nullable(),
+  surveyId: z.string().min(1, "Survey ID is required"),
+  triggerType: z
+    .enum(["PAGE_LOAD", "EXIT_INTENT", "SCROLL_DEPTH", "TIME_ON_PAGE", "ELEMENT_CLICK", "ELEMENT_VISIBLE"])
+    .optional()
+    .default("PAGE_LOAD"),
+  triggerValue: z.string().optional().nullable(),
+  triggerSelector: z.string().optional().nullable(),
+  displayMode: z.enum(["POPUP", "SLIDE_IN", "EMBEDDED", "BANNER", "FULL_PAGE"]).optional().default("POPUP"),
+  displayPosition: z.string().optional().nullable(),
+  displayDelay: z.number().int().min(0).optional().default(0),
+  showOnce: z.boolean().optional().default(true),
+  cooldownDays: z.number().int().min(0).max(365).optional().default(7),
+  percentageShow: z.number().int().min(1).max(100).optional().default(100),
+  enabled: z.boolean().optional().default(true),
+});
+
 /**
  * Helper to format Zod errors as strings
  */

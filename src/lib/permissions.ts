@@ -14,7 +14,9 @@ export type Permission =
   | "delete"
   | "manageTeam"
   | "viewResponses"
-  | "publish";
+  | "publish"
+  | "viewRecordings"
+  | "manageBehaviorSettings";
 
 export interface SurveyAccess {
   hasAccess: boolean;
@@ -37,6 +39,8 @@ const ROLE_PERMISSIONS: Record<CollaboratorRole, Record<Permission, boolean>> = 
     manageTeam: true,
     viewResponses: true,
     publish: true,
+    viewRecordings: true,
+    manageBehaviorSettings: true,
   },
   EDITOR: {
     view: true,
@@ -45,6 +49,8 @@ const ROLE_PERMISSIONS: Record<CollaboratorRole, Record<Permission, boolean>> = 
     manageTeam: false,
     viewResponses: true,
     publish: true,
+    viewRecordings: true,
+    manageBehaviorSettings: true,
   },
   VIEWER: {
     view: true,
@@ -53,6 +59,8 @@ const ROLE_PERMISSIONS: Record<CollaboratorRole, Record<Permission, boolean>> = 
     manageTeam: false,
     viewResponses: true,
     publish: false,
+    viewRecordings: true,
+    manageBehaviorSettings: false,
   },
 };
 
@@ -87,6 +95,8 @@ export async function getSurveyAccess(
         manageTeam: false,
         viewResponses: false,
         publish: false,
+        viewRecordings: false,
+        manageBehaviorSettings: false,
       },
     };
   }
@@ -132,6 +142,8 @@ export async function getSurveyAccess(
       manageTeam: false,
       viewResponses: false,
       publish: false,
+      viewRecordings: false,
+      manageBehaviorSettings: false,
     },
   };
 }

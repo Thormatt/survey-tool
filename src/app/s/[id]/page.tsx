@@ -13,6 +13,10 @@ import {
   BranchLogic,
   OptionSource,
 } from "@/lib/conditional-logic";
+import { useSessionRecorder } from "@/hooks/useSessionRecorder";
+import { useHeatmapCapture } from "@/hooks/useHeatmapCapture";
+import { ConsentBanner } from "@/components/behavior/consent-banner";
+import type { BehaviorSettings } from "@/types/behavior";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -353,6 +357,48 @@ export default function SurveyResponsePage() {
   const [showConfetti, setShowConfetti] = useState(false);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 
+  // Behavior tracking state
+  const [behaviorSettings, setBehaviorSettings] = useState<BehaviorSettings | null>(null);
+  const [showConsentBanner, setShowConsentBanner] = useState(false);
+  const [responseId, setResponseId] = useState<string | null>(null);
+
+  // Get current question ID for heatmap tracking (used by hooks below)
+  const currentQuestionId = survey && currentIndex >= 0 ? survey.questions[currentIndex]?.id : undefined;
+
+  // Session recording hook
+  const recorder = useSessionRecorder({
+    surveyId: params.id as string,
+    enabled: !isPreview && !!behaviorSettings?.recordingEnabled,
+    onConsentRequired: (settings) => {
+      if (settings.consentRequired) {
+        setShowConsentBanner(true);
+      }
+    },
+    onError: (error) => {
+      console.error("Recording error:", error);
+    },
+  });
+
+  // Heatmap capture hook
+  useHeatmapCapture({
+    surveyId: params.id as string,
+    sessionToken: recorder.sessionToken,
+    enabled: !isPreview && !!behaviorSettings?.heatmapsEnabled && recorder.state === "recording",
+    currentQuestionId,
+  });
+
+  // Handle consent acceptance
+  const handleConsentAccept = useCallback(() => {
+    setShowConsentBanner(false);
+    recorder.giveConsent();
+  }, [recorder]);
+
+  // Handle consent decline
+  const handleConsentDecline = useCallback(() => {
+    setShowConsentBanner(false);
+    recorder.denyConsent();
+  }, [recorder]);
+
   useEffect(() => {
     async function fetchSurvey() {
       try {
@@ -389,6 +435,20 @@ export default function SurveyResponsePage() {
         const data = await res.json();
         setSurvey(data);
         setAccessError(null);
+
+        // Fetch behavior settings (don't block on errors)
+        if (!isPreview) {
+          try {
+            const behaviorRes = await fetch(`/api/surveys/${params.id}/behavior`);
+            if (behaviorRes.ok) {
+              const behaviorData = await behaviorRes.json();
+              setBehaviorSettings(behaviorData);
+            }
+          } catch (behaviorErr) {
+            // Silently fail - behavior tracking is optional
+            console.warn("Failed to load behavior settings:", behaviorErr);
+          }
+        }
       } catch {
         setError("Failed to load survey");
       } finally {
@@ -400,6 +460,21 @@ export default function SurveyResponsePage() {
       fetchSurvey();
     }
   }, [params.id, userLoaded, user, isPreview]);
+
+  // Start recording when behavior settings are loaded
+  useEffect(() => {
+    if (!behaviorSettings || !behaviorSettings.recordingEnabled || isPreview) {
+      return;
+    }
+
+    // Start recording - the hook will handle consent checking
+    if (recorder.state === "idle") {
+      recorder.startRecording().catch((err) => {
+        console.warn("Failed to start recording:", err);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [behaviorSettings, isPreview, recorder.state]);
 
   // Auto-focus input when question changes
   useEffect(() => {
@@ -731,6 +806,22 @@ export default function SurveyResponsePage() {
         throw new Error("Failed to submit response");
       }
 
+      // Get response ID for linking recording
+      const responseData = await res.json();
+      const newResponseId = responseData.id;
+      setResponseId(newResponseId);
+
+      // Link recording to response and stop recording
+      if (recorder.state === "recording" && recorder.sessionToken && newResponseId) {
+        try {
+          await recorder.linkResponse(newResponseId);
+          await recorder.stopRecording();
+        } catch (recordingErr) {
+          // Don't block submission on recording errors
+          console.warn("Failed to finalize recording:", recordingErr);
+        }
+      }
+
       setShowConfetti(true);
       setTimeout(() => setSubmitted(true), 500);
     } catch {
@@ -869,6 +960,15 @@ export default function SurveyResponsePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#1a1a2e] to-[#2d2d44] flex flex-col">
+      {/* Consent banner for behavior tracking */}
+      {showConsentBanner && behaviorSettings && (
+        <ConsentBanner
+          settings={behaviorSettings}
+          onAccept={handleConsentAccept}
+          onDecline={handleConsentDecline}
+        />
+      )}
+
       {/* Progress bar */}
       <div className="fixed top-0 left-0 right-0 z-40">
         <div className="h-1 bg-white/10">
